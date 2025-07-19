@@ -1,0 +1,38 @@
+<!-- Updated templates/cases/move_case.html (add note if no holders) -->
+
+{% extends 'base.html' %}
+
+{% load crispy_forms_tags %}
+
+{% block title %}Move Case: {{ case.case_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Move Case: {{ case.case_id }}</h2>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <p><strong>Current Status:</strong> {{ case.current_status }}</p>
+            <p><strong>Current Holder:</strong> {{ case.current_holder.user.username }} ({{ case.current_holder.get_role_display }})</p>
+            <p><strong>Workflow Stage:</strong> {{ case.current_holder.role }}</p>
+        </div>
+    </div>
+    
+    {% if preview_message %}
+        <div class="alert alert-info">
+            {{ preview_message }}
+        </div>
+    {% endif %}
+    
+    <form method="post">
+        {% csrf_token %}
+        {{ form|crispy }}
+        {% if form.fields.to_holder.queryset.exists or form.movement_type.value == 'complete' %}
+            <button type="submit" class="btn btn-primary">Confirm Action</button>
+        {% else %}
+            <p class="text-danger">No available holders. Please add in admin.</p>
+        {% endif %}
+        <a href="{% url 'case_detail' case.case_id %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

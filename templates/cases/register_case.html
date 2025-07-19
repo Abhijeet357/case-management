@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Register New Case{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Register New Case</h2>
+    <form method="post" id="registrationForm">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <button type="submit" class="btn btn-primary">Done</button>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('registrationForm');
+        const fields = {
+            ppo_number: 'ppo_number',
+            name_pensioner: 'name_pensioner',
+            mobile_number: 'mobile_number',
+            last_lc_done_date: 'last_lc_done_date',
+            kyp_flag: 'kyp_flag',
+            mode_of_receipt: 'mode_of_receipt',
+            date_of_death: 'date_of_death',
+            name_claimant: 'name_claimant',
+            relationship: 'relationship',
+            service_book_enclosed: 'service_book_enclosed',
+            type_of_correction: 'type_of_correction',
+            original_ppo_submitted: 'original_ppo_submitted',
+            fresh_or_compliance: 'fresh_or_compliance',
+            type_of_employee: 'type_of_employee',
+            retiring_employee: 'retiring_employee',
+        };
+
+        const getField = (name) => form.querySelector(`[name="${name}"]`);
+        const showFields = (fieldNames) => {
+            for (const key in fields) {
+                const fieldElement = getField(fields[key]);
+                if (!fieldElement) continue;
+                const container = fieldElement.closest('.form-group') || fieldElement.parentElement;
+                if (fieldNames.includes(fields[key])) {
+                    container.style.display = 'block';
+                    fieldElement.required = true;
+                } else {
+                    container.style.display = 'none';
+                    fieldElement.required = false;
+                }
+            }
+        };
+
+        const caseTypeSelect = getField('case_type');
+        const subCategorySelect = getField('sub_category');
+
+        function handleFieldVisibility() {
+            const type = caseTypeSelect.options[caseTypeSelect.selectedIndex]?.text || '';
+            const sub = subCategorySelect.options[subCategorySelect.selectedIndex]?.text || '';
+
+            // Default: hide all
+            showFields([]);
+
+            if (type === 'DLC') {
+                showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'last_lc_done_date', 'kyp_flag']);
+            } else if (type === 'KYP') {
+                showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
+            } else if (type === 'Dak Section (Pension)') {
+                switch (sub) {
+                    case 'KYP Received by Post or by hand at Receipt Section':
+                        showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'mode_of_receipt']);
+                        break;
+                    case 'Family Pension Case (Death In Service)':
+                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']);
+                        break;
+                    case 'Family Pension Case (Extended Family Pension)':
+                    case 'LTA':
+                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number']);
+                        break;
+                    case 'PPO Correction':
+                        showFields(['type_of_correction', 'ppo_number', 'name_pensioner', 'original_ppo_submitted']);
+                        break;
+                    case 'Superannuation':
+                        showFields(['fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'service_book_enclosed']);
+                        loadRetiringEmployees();  // Fetch via AJAX if needed
+                        break;
+                    case 'FMA':
+                        showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
+                        break;
+                }
+            }
+        }
+
+        // AJAX fetch PPO details
+        const ppoField = getField('ppo_number');
+        const namePensionerField = getField('name_pensioner');
+        const mobileField = getField('mobile_number');
+        const lastLcField = getField('last_lc_done_date');
+        const kypField = getField('kyp_flag');
+
+        ppoField.addEventListener('blur', function () {
+            if (ppoField.value) {
+                fetch(`/api/ppo/?ppo_number=${ppoField.value}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.error) {
+                            namePensionerField.value = data.name || '';
+                            mobileField.value = data.mobile || '';
+                            lastLcField.value = data.last_lc || '';
+                            kypField.checked = !!data.kyp;
+                        }
+                    });
+            }
+        });
+
+        // Load Retiring Employees for Superannuation
+        const retiringEmployeeField = getField('retiring_employee');
+
+        function loadRetiringEmployees() {
+            fetch('/api/retiring_employees/')
+                .then(res => res.json())
+                .then(data => {
+                    retiringEmployeeField.innerHTML = '';
+                    data.employees.forEach(emp => {
+                        const opt = document.createElement('option');
+                        opt.value = emp.id;
+                        opt.text = emp.name;
+                        retiringEmployeeField.appendChild(opt);
+                    });
+                });
+        }
+
+        caseTypeSelect.addEventListener('change', handleFieldVisibility);
+        subCategorySelect.addEventListener('change', handleFieldVisibility);
+
+        handleFieldVisibility();  // Initial call
+    });
+</script>
+{% endblock %}

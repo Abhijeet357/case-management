@@ -1,0 +1,16 @@
+# cases/urls.py (full file)
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.dashboard, name='dashboard'),
+    path('cases/', views.case_list, name='case_list'),
+    path('cases/register/', views.register_case, name='register_case'),
+    path('cases/<str:case_id>/', views.case_detail, name='case_detail'),
+    path('cases/<str:case_id>/move/', views.move_case, name='move_case'),
+    path('users/register/', views.register_user, name='register_user'),
+    path('import/bulk/', views.bulk_import_cases, name='bulk_import_cases'),
+    path('api/ppo/', views.get_ppo_data, name='get_ppo_data'),
+    path('api/sub_categories/', views.get_sub_categories, name='get_sub_categories'),
+]
