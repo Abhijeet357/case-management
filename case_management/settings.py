@@ -1,4 +1,4 @@
-# case_management/settings.py (full file with simple_history added)
+# case_management/settings.py (added date formats)
 
 import os
 from pathlib import Path
@@ -102,3 +102,9 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/cases/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+# Date formats for dd-mm-yyyy
+DATE_FORMAT = 'd-m-Y'
+DATE_INPUT_FORMATS = ['%d-%m-%Y', '%Y-%m-%d']  # Prefer dd-mm-yyyy, fallback to yyyy-mm-dd
+USE_L10N = False
+USE_I18N = False  # Disable internationalization to use custom formats

@@ -4,135 +4,189 @@
 {% block title %}Register New Case{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Register New Case</h2>
-    <form method="post" id="registrationForm">
-        {% csrf_token %}
-        {{ form|crispy }}
-        <button type="submit" class="btn btn-primary">Done</button>
-    </form>
-</div>
+<h2>Register New Case</h2>
 
+<form method="post" id="case-form">
+    {% csrf_token %}
+    
+    <!-- Common fields -->
+    <div class="row">
+        <div class="col-md-6">{{ form.case_type|as_crispy_field }}</div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">{{ form.priority|as_crispy_field }}</div>
+    </div>
+    {{ form.initial_holder|as_crispy_field }}
+    
+    <!-- Conditional field groups -->
+    <div id="know-your-pensioner-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.mode_of_receipt|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-death-in-service-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-extended-family-pension-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="life-time-arrears-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="ppo-correction-fields" class="specific-fields" style="display: none;">
+        {{ form.type_of_correction|as_crispy_field }}
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.original_ppo_submitted|as_crispy_field }}
+    </div>
+    
+    <div id="superannuation-fields" class="specific-fields" style="display: none;">
+        {{ form.retirement_month|as_crispy_field }}
+        {{ form.retirement_year|as_crispy_field }}
+        {{ form.fresh_or_compliance|as_crispy_field }}
+        {{ form.type_of_employee|as_crispy_field }}
+        {{ form.retiring_employee|as_crispy_field }}
+        {{ form.date_of_retirement|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="fixed-medical-allowance-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="death-intimation-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.type_of_pension|as_crispy_field }}
+        {{ form.type_of_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-conversion-of-superannuation-fields" class="specific-fields" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.type_of_pension|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Done</button>
+</form>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const form = document.getElementById('registrationForm');
-        const fields = {
-            ppo_number: 'ppo_number',
-            name_pensioner: 'name_pensioner',
-            mobile_number: 'mobile_number',
-            last_lc_done_date: 'last_lc_done_date',
-            kyp_flag: 'kyp_flag',
-            mode_of_receipt: 'mode_of_receipt',
-            date_of_death: 'date_of_death',
-            name_claimant: 'name_claimant',
-            relationship: 'relationship',
-            service_book_enclosed: 'service_book_enclosed',
-            type_of_correction: 'type_of_correction',
-            original_ppo_submitted: 'original_ppo_submitted',
-            fresh_or_compliance: 'fresh_or_compliance',
-            type_of_employee: 'type_of_employee',
-            retiring_employee: 'retiring_employee',
-        };
-
-        const getField = (name) => form.querySelector(`[name="${name}"]`);
-        const showFields = (fieldNames) => {
-            for (const key in fields) {
-                const fieldElement = getField(fields[key]);
-                if (!fieldElement) continue;
-                const container = fieldElement.closest('.form-group') || fieldElement.parentElement;
-                if (fieldNames.includes(fields[key])) {
-                    container.style.display = 'block';
-                    fieldElement.required = true;
-                } else {
-                    container.style.display = 'none';
-                    fieldElement.required = false;
-                }
-            }
-        };
-
-        const caseTypeSelect = getField('case_type');
-        const subCategorySelect = getField('sub_category');
-
-        function handleFieldVisibility() {
-            const type = caseTypeSelect.options[caseTypeSelect.selectedIndex]?.text || '';
-            const sub = subCategorySelect.options[subCategorySelect.selectedIndex]?.text || '';
-
-            // Default: hide all
-            showFields([]);
-
-            if (type === 'DLC') {
-                showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'last_lc_done_date', 'kyp_flag']);
-            } else if (type === 'KYP') {
-                showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
-            } else if (type === 'Dak Section (Pension)') {
-                switch (sub) {
-                    case 'KYP Received by Post or by hand at Receipt Section':
-                        showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'mode_of_receipt']);
-                        break;
-                    case 'Family Pension Case (Death In Service)':
-                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']);
-                        break;
-                    case 'Family Pension Case (Extended Family Pension)':
-                    case 'LTA':
-                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number']);
-                        break;
-                    case 'PPO Correction':
-                        showFields(['type_of_correction', 'ppo_number', 'name_pensioner', 'original_ppo_submitted']);
-                        break;
-                    case 'Superannuation':
-                        showFields(['fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'service_book_enclosed']);
-                        loadRetiringEmployees();  // Fetch via AJAX if needed
-                        break;
-                    case 'FMA':
-                        showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
-                        break;
-                }
-            }
-        }
-
-        // AJAX fetch PPO details
-        const ppoField = getField('ppo_number');
-        const namePensionerField = getField('name_pensioner');
-        const mobileField = getField('mobile_number');
-        const lastLcField = getField('last_lc_done_date');
-        const kypField = getField('kyp_flag');
-
-        ppoField.addEventListener('blur', function () {
-            if (ppoField.value) {
-                fetch(`/api/ppo/?ppo_number=${ppoField.value}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (!data.error) {
-                            namePensionerField.value = data.name || '';
-                            mobileField.value = data.mobile || '';
-                            lastLcField.value = data.last_lc || '';
-                            kypField.checked = !!data.kyp;
-                        }
-                    });
-            }
-        });
-
-        // Load Retiring Employees for Superannuation
-        const retiringEmployeeField = getField('retiring_employee');
-
-        function loadRetiringEmployees() {
-            fetch('/api/retiring_employees/')
-                .then(res => res.json())
-                .then(data => {
-                    retiringEmployeeField.innerHTML = '';
-                    data.employees.forEach(emp => {
-                        const opt = document.createElement('option');
-                        opt.value = emp.id;
-                        opt.text = emp.name;
-                        retiringEmployeeField.appendChild(opt);
-                    });
+$(document).ready(function() {
+    // Show/hide fields based on case type
+    $('#id_case_type').change(function() {
+        var selectedText = $('option:selected', this).text().trim().toLowerCase().replace(/ \(.+\)/g, '').replace(/ /g, '-').replace(/-+/g, '-');
+        console.log('Selected case type ID:', selectedText); // For debugging
+        $('.specific-fields').hide();
+        $('#' + selectedText + '-fields').show();
+        
+        // Load sub-categories
+        var caseTypeId = $(this).val();
+        if (caseTypeId) {
+            $.get('/api/sub_categories/', {case_type_id: caseTypeId}, function(data) {
+                $('#id_sub_category').empty();
+                $('#id_sub_category').append('<option value="">Select Sub-Category</option>');
+                $.each(data.sub_categories, function(index, cat) {
+                    $('#id_sub_category').append('<option value="' + cat + '">' + cat + '</option>');
                 });
+            }).fail(function() {
+                console.error('Failed to load sub-categories');
+            });
         }
-
-        caseTypeSelect.addEventListener('change', handleFieldVisibility);
-        subCategorySelect.addEventListener('change', handleFieldVisibility);
-
-        handleFieldVisibility();  // Initial call
     });
+    
+    // Fetch PPO data
+    $('#id_ppo_number').change(function() {
+        var ppoNumber = $(this).val();
+        if (ppoNumber) {
+            $.get('/api/ppo/', {ppo_number: ppoNumber}, function(data) {
+                console.log('PPO data received:', data); // Debug
+                if (!data.error) {
+                    $('#id_name_pensioner').val(data.name);
+                    $('#id_mobile_number').val(data.mobile);
+                    // Add more fields like last_lc_done_date, kyp_flag if returned by API
+                } else {
+                    console.error('PPO error:', data.error);
+                }
+            }).fail(function() {
+                console.error('Failed to load PPO data');
+            });
+        }
+    });
+    
+    // For Superannuation: Fetch retiring employees on month/year change
+    $('#id_retirement_month, #id_retirement_year').change(function() {
+        var month = $('#id_retirement_month').val();
+        var year = $('#id_retirement_year').val();
+        console.log('Selected month/year:', month, year); // Debug
+        if (month && year) {
+            $.get('/api/retiring_employees_by_month_year/', {month: month, year: year}, function(data) {
+                console.log('Employees received:', data.employees); // Debug
+                $('#id_retiring_employee').empty();
+                $('#id_retiring_employee').append('<option value="">Select Employee</option>');
+                $.each(data.employees, function(index, emp) {
+                    $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
+                });
+            }).fail(function(jqXHR, textStatus, errorThrown) {
+                console.error('Failed to load retiring employees:', textStatus, errorThrown, jqXHR.responseText);
+            });
+        }
+    });
+    
+    // Fetch retiring employee data (date)
+    $('#id_retiring_employee').change(function() {
+        var employeeId = $(this).val();
+        console.log('Selected employee ID:', employeeId); // Debug
+        if (employeeId) {
+            $.get('/api/retiring_employee/', {employee_id: employeeId}, function(data) {
+                console.log('Employee data received:', data); // Debug
+                if (!data.error) {
+                    $('#id_date_of_retirement').val(data.retirement_date);
+                } else {
+                    console.error('Employee error:', data.error);
+                }
+            }).fail(function() {
+                console.error('Failed to load retiring employee data');
+            });
+        }
+    });
+    
+    // Trigger initial change if editing existing
+    $('#id_case_type').change();
+});
 </script>
+
 {% endblock %}

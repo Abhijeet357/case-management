@@ -1,4 +1,6 @@
-# cases/views.py (full file with death intimate handling)
+# cases/views.py (added imports for date, timedelta, relativedelta)
+
+# cases/views.py (ensured imports are at top)
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -11,10 +13,12 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 import json
 import csv
-from datetime import datetime, timedelta
-from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, StageAssignment, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, get_next_holder_for_stage, FamilyPensionClaim
+from datetime import datetime, timedelta, date
+from dateutil.relativedelta import relativedelta
+from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee
 from .forms import CaseRegistrationForm, CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
 
+# ... (rest of the views code remains the same)
 @login_required
 def dashboard(request):
     """Main dashboard view"""
@@ -49,8 +53,8 @@ def dashboard(request):
                 is_completed=False
             ).count()
     
-    # Add unclaimed Death Intimate for monitoring
-    unclaimed_death_cases = Case.objects.filter(case_type__name='Death Intimate', family_pension_claim__claim_status='pending')
+    # Add unclaimed Death Intimation for monitoring (fixed typo)
+    unclaimed_death_cases = Case.objects.filter(case_type__name='Death Intimation', family_pension_claim__claim_status='pending')
     
     context = {
         'user_profile': user_profile,
@@ -64,7 +68,7 @@ def dashboard(request):
         'low_priority': low_priority,
         'recent_cases': recent_cases,
         'stage_stats': stage_stats,
-        'unclaimed_death_cases': unclaimed_death_cases,  # Added
+        'unclaimed_death_cases': unclaimed_death_cases,
     }
     
     return render(request, 'cases/dashboard.html', context)
@@ -170,8 +174,8 @@ def register_case(request):
             case.created_by = request.user
             case.last_updated_by = request.user
             
-            # Get initial holder (first DH)
-            initial_holder = get_next_holder_for_stage('DH')
+            # Set initial holder from form
+            initial_holder = form.cleaned_data['initial_holder']
             case.current_holder = initial_holder
             case.current_status = f"With {initial_holder.user.username}"
             case.case_title = f"{case.case_type.name} - {case.sub_category}"
@@ -186,6 +190,10 @@ def register_case(request):
                 except PPOMaster.DoesNotExist:
                     pass
             
+            # For Superannuation, set date_of_retirement
+            if case.case_type.name == 'Superannuation' and case.retiring_employee:
+                case.date_of_retirement = case.retiring_employee.retirement_date
+            
             case.save()
             
             # Create initial movement record
@@ -198,12 +206,14 @@ def register_case(request):
                 updated_by=request.user
             )
             
-            # For Death Intimate, create claim
-            if case.case_type.name == 'Death Intimate':
+            # For Death Intimation, create claim (fixed typo and adjusted fields)
+            if case.case_type.name == 'Death Intimation':
                 FamilyPensionClaim.objects.create(
                     case=case,
-                    claim_received=form.cleaned_data.get('claim_received'),
-                    eligible_claimant=form.cleaned_data.get('claimant'),
+                    claim_received=form.cleaned_data.get('date_of_death'),
+                    eligible_claimant=None,  # No direct field; set to None or create FamilyMember if needed
+                    ppo_master=case.ppo_master,
+                    created_by=request.user
                 )
             
             messages.success(request, f'Case {case.case_id} registered successfully!')
@@ -371,8 +381,8 @@ def get_ppo_data(request):
             'name': ppo.name,
             'designation': ppo.designation,
             'department': ppo.department,
-            'mobile': ppo.mobile_number,
-            'last_lc': ppo.last_lc_done_date.strftime('%Y-m-d') if ppo.last_lc_done_date else '',
+            'mobile': ppo.phone,  # Assuming phone is mobile
+            'last_lc': ppo.last_lc_done_date.strftime('%d-%m-%Y') if ppo.last_lc_done_date else '',
             'kyp': ppo.kyp_flag,
         }
         return JsonResponse(data)
@@ -390,6 +400,40 @@ def get_sub_categories(request):
         return JsonResponse({'sub_categories': sub_cats})
     except CaseType.DoesNotExist:
         return JsonResponse({'sub_categories': []})
+
+@require_http_methods(["GET"])
+def get_retiring_employee_data(request):
+    employee_id = request.GET.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'error': 'No employee ID provided'}, status=400)
+    try:
+        employee = RetiringEmployee.objects.get(id=employee_id)
+        data = {
+            'retirement_date': employee.retirement_date.strftime('%d-%m-%Y') if employee.retirement_date else '',
+            # Add more fields if needed, e.g., name if not already selected
+        }
+        return JsonResponse(data)
+    except RetiringEmployee.DoesNotExist:
+        return JsonResponse({'error': 'Employee not found'}, status=404)
+
+@require_http_methods(["GET"])
+def get_retiring_employees_by_month_year(request):
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    if not month or not year:
+        return JsonResponse({'employees': []})
+    try:
+        month = int(month)
+        year = int(year)
+        from_date = date(year, month, 1)
+        to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
+        employees = RetiringEmployee.objects.filter(
+            retirement_date__gte=from_date,
+            retirement_date__lte=to_date
+        ).values('id', 'name')
+        return JsonResponse({'employees': list(employees)})
+    except ValueError:
+        return JsonResponse({'employees': []})
 
 def register_user(request):
     if request.method == 'POST':

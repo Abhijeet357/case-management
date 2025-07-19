@@ -1,4 +1,4 @@
-# cases/models.py (corrected file with conflicts resolved)
+# cases/models.py (updated created_by to allow null=True, blank=True for flexibility)
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -30,18 +30,6 @@ def get_status_color(stage, priority):
         return 'Orange'
     else:
         return 'Green'
-
-def get_next_holder_for_stage(stage):
-    holders = UserProfile.objects.filter(role=stage, is_active_holder=True).order_by('id')
-    if not holders.exists():
-        return None
-    
-    assignment, created = StageAssignment.objects.get_or_create(stage=stage)
-    next_index = (assignment.last_index + 1) % holders.count()
-    assignment.last_index = next_index
-    assignment.save()
-    
-    return holders[next_index]
 
 class UserProfile(models.Model):
     ROLE_CHOICES = [
@@ -119,7 +107,7 @@ class RetiringEmployee(models.Model):
     # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_retiring_employees')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_retiring_employees')
     
     class Meta:
         ordering = ['retirement_date', 'name']
@@ -227,13 +215,6 @@ class CaseType(models.Model):
     def get_sub_categories_list(self):
         return [cat.strip() for cat in self.sub_categories.split(',') if cat.strip()]
 
-class StageAssignment(models.Model):
-    stage = models.CharField(max_length=10, unique=True)
-    last_index = models.IntegerField(default=0)
-    
-    def __str__(self):
-        return f"Assignment for {self.stage}"
-
 class Case(models.Model):
     PRIORITY_CHOICES = [
         ('High', 'High'),
@@ -248,20 +229,19 @@ class Case(models.Model):
         ('Blue', 'Blue'),
     ]
     
-    # Add missing choice fields
     MODE_OF_RECEIPT_CHOICES = [
+        ('by_post', 'By Post'),
+        ('by_hand', 'By Hand'),
         ('online', 'Online'),
         ('offline', 'Offline'),
-        ('post', 'Post'),
         ('email', 'Email'),
         ('in_person', 'In Person'),
     ]
     
     TYPE_OF_CORRECTION_CHOICES = [
-        ('name_correction', 'Name Correction'),
-        ('address_correction', 'Address Correction'),
-        ('bank_details', 'Bank Details'),
-        ('pension_amount', 'Pension Amount'),
+        ('change_of_address', 'Change Of Address'),
+        ('change_dob_family', 'Change / Correction of DOB of Family Pensioner'),
+        ('change_name', 'Change / Correction of Name of the Pensioner / Family Pensioner'),
         ('other', 'Other'),
     ]
     
@@ -271,10 +251,19 @@ class Case(models.Model):
     ]
     
     TYPE_OF_EMPLOYEE_CHOICES = [
-        ('regular', 'Regular Employee'),
-        ('contract', 'Contract Employee'),
-        ('temporary', 'Temporary Employee'),
-        ('consultant', 'Consultant'),
+        ('MTNL_IDA', 'MTNL IDA'),
+        ('MTNL_CDA', 'MTNL CDA'),
+        ('DOT_CDA', 'DOT CDA'),
+    ]
+    
+    TYPE_OF_PENSION_CHOICES = [
+        ('MTNL-IDA', 'MTNL-IDA'),
+        ('DOT-CDA', 'DOT-CDA'),
+    ]
+    
+    TYPE_OF_PENSIONER_CHOICES = [
+        ('Superannuation/VR', 'Superannuation / VR'),
+        ('Family Pensioner', 'Family Pensioner'),
     ]
     
     # Existing fields
@@ -315,6 +304,9 @@ class Case(models.Model):
     fresh_or_compliance = models.CharField(max_length=20, choices=FRESH_COMPLIANCE_CHOICES, blank=True)
     type_of_employee = models.CharField(max_length=20, choices=TYPE_OF_EMPLOYEE_CHOICES, blank=True)
     retiring_employee = models.ForeignKey('RetiringEmployee', on_delete=models.SET_NULL, null=True, blank=True)
+    type_of_pension = models.CharField(max_length=20, choices=TYPE_OF_PENSION_CHOICES, blank=True)
+    type_of_pensioner = models.CharField(max_length=30, choices=TYPE_OF_PENSIONER_CHOICES, blank=True)
+    date_of_retirement = models.DateField(null=True, blank=True)  # For Superannuation, fetched but stored
     
     class Meta:
         ordering = ['-registration_date']

@@ -1,20 +1,20 @@
-# Full corrected cases/forms.py with RetiringEmployee import added
-
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit, Row, Column, Field
-from .models import Case, CaseType, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee  # Added RetiringEmployee
+from .models import Case, CaseType, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee, timezone
+from dateutil.relativedelta import relativedelta
+from datetime import date
 
 class CaseRegistrationForm(forms.ModelForm):
     ppo_number = forms.CharField(max_length=20, required=False, label="PPO Number")
     name_pensioner = forms.CharField(max_length=200, required=False, label="Name of the pensioner", widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     mobile_number = forms.CharField(max_length=15, required=False, label="Mobile Number", widget=forms.TextInput(attrs={'readonly': 'readonly'}))
-    last_lc_done_date = forms.DateField(required=False, label="Last LC Done date", widget=forms.DateInput(attrs={'readonly': 'readonly'}))
+    last_lc_done_date = forms.DateField(required=False, label="Last LC Done date", widget=forms.TextInput(attrs={'placeholder': 'dd-mm-yyyy'}))
     kyp_flag = forms.BooleanField(required=False, label="KYP Flag", widget=forms.CheckboxInput(attrs={'disabled': 'disabled'}))
     mode_of_receipt = forms.ChoiceField(choices=Case.MODE_OF_RECEIPT_CHOICES, required=False, label="Mode of Receipt")
-    date_of_death = forms.DateField(required=False, label="Date of death", widget=forms.DateInput(attrs={'type': 'date'}))
+    date_of_death = forms.DateField(required=False, label="Date of death", widget=forms.TextInput(attrs={'placeholder': 'dd-mm-yyyy'}))
     name_claimant = forms.CharField(max_length=200, required=False, label="Name of the Claimant")
     relationship = forms.CharField(max_length=50, required=False, label="Relationship with the deceased")
     service_book_enclosed = forms.BooleanField(required=False, label="Whether Service book also enclosed")
@@ -23,67 +23,60 @@ class CaseRegistrationForm(forms.ModelForm):
     fresh_or_compliance = forms.ChoiceField(choices=Case.FRESH_COMPLIANCE_CHOICES, required=False, label="Whether Fresh Case or Compliance")
     type_of_employee = forms.ChoiceField(choices=Case.TYPE_OF_EMPLOYEE_CHOICES, required=False, label="Type of Employee")
     retiring_employee = forms.ModelChoiceField(queryset=RetiringEmployee.objects.none(), required=False, label="Name of the employee")
+    type_of_pension = forms.ChoiceField(choices=Case.TYPE_OF_PENSION_CHOICES, required=False, label="Type of Pension")
+    type_of_pensioner = forms.ChoiceField(choices=Case.TYPE_OF_PENSIONER_CHOICES, required=False, label="Type of Pensioner")
+    date_of_retirement = forms.DateField(required=False, label="Date of Retirement", widget=forms.TextInput(attrs={'readonly': 'readonly', 'placeholder': 'dd-mm-yyyy'}))
+    initial_holder = forms.ModelChoiceField(queryset=UserProfile.objects.filter(role='DH', is_active_holder=True), required=True, label="Assigned to Dealing Hand")
+    
+    # New fields for Superannuation
+    retirement_month = forms.ChoiceField(choices=[(i, f'{i:02d}') for i in range(1, 13)], required=False, label="Month of Retirement")
+    retirement_year = forms.ChoiceField(choices=[], required=False, label="Year of Retirement")
     
     class Meta:
         model = Case
-        fields = ['case_type', 'sub_category', 'case_description', 'applicant_name', 'priority', 'ppo_number', 'name_pensioner', 'mobile_number', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee']
-        widgets = {
-            'case_description': forms.Textarea(attrs={'rows': 3}),
-        }
+        fields = ['case_type', 'priority', 'ppo_number', 'name_pensioner', 'mobile_number', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'type_of_pension', 'type_of_pensioner', 'date_of_retirement', 'initial_holder', 'retirement_month', 'retirement_year']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper()
-        self.helper.layout = Layout(
-            Row(
-                Column('case_type', css_class='form-group col-md-6 mb-0'),
-                Column('sub_category', css_class='form-group col-md-6 mb-0'),
-                css_class='form-row'
-            ),
-            Row(
-                Column('applicant_name', css_class='form-group col-md-6 mb-0'),
-                Column('ppo_number', css_class='form-group col-md-6 mb-0'),
-                css_class='form-row'
-            ),
-            Row(
-                Column('priority', css_class='form-group col-md-6 mb-0'),
-                css_class='form-row'
-            ),
-            # Conditional fields - grouped in divs in template
-            'name_pensioner',
-            'mobile_number',
-            'last_lc_done_date',
-            'kyp_flag',
-            'mode_of_receipt',
-            'date_of_death',
-            'name_claimant',
-            'relationship',
-            'service_book_enclosed',
-            'type_of_correction',
-            'original_ppo_submitted',
-            'fresh_or_compliance',
-            'type_of_employee',
-            'retiring_employee',
-            'case_description',
-            Submit('submit', 'Register Case', css_class='btn btn-primary')
-        )
+        self.helper.layout = None  # Remove layout to render manually in template for conditionals
         
-        # Initialize sub_category choices
-        self.fields['sub_category'].choices = [('', 'Select Sub-Category')]
+        # Dynamic year choices: current year to current + 2
+        current_year = date.today().year
+        self.fields['retirement_year'].choices = [(y, str(y)) for y in range(current_year, current_year + 3)]
         
-        # Make sub_category dependent on case_type
-        if 'case_type' in self.data:
-            try:
-                case_type_id = int(self.data.get('case_type'))
-                case_type = CaseType.objects.get(id=case_type_id)
-                sub_cats = case_type.get_sub_categories_list()
-                self.fields['sub_category'].choices = [(cat, cat) for cat in sub_cats]
-            except (ValueError, TypeError, CaseType.DoesNotExist):
-                pass
-        elif self.instance.pk:
-            if self.instance.case_type:
-                sub_cats = self.instance.case_type.get_sub_categories_list()
-                self.fields['sub_category'].choices = [(cat, cat) for cat in sub_cats]
+        # Set retiring_employee to empty queryset; populated via JS
+        self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        case_type = cleaned_data.get('case_type')
+        if case_type:
+            type_name = case_type.name
+            required_fields = []
+            if type_name == 'Know Your Pensioner (KYP)':
+                required_fields = ['ppo_number', 'name_pensioner', 'mobile_number', 'mode_of_receipt']
+            elif type_name == 'Family Pension - Death in Service':
+                required_fields = ['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']
+            elif type_name == 'Family Pension - Extended Family Pension':
+                required_fields = ['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number']
+            elif type_name == 'Life Time Arrears (LTA)':
+                required_fields = ['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number']
+            elif type_name == 'PPO Correction':
+                required_fields = ['type_of_correction', 'ppo_number', 'name_pensioner', 'original_ppo_submitted']
+            elif type_name == 'Superannuation':
+                required_fields = ['fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'service_book_enclosed', 'retirement_month', 'retirement_year']
+            elif type_name == 'Fixed Medical Allowance (FMA)':
+                required_fields = ['ppo_number', 'name_pensioner', 'mobile_number']
+            elif type_name == 'Death Intimation':
+                required_fields = ['ppo_number', 'name_pensioner', 'type_of_pension', 'type_of_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']
+            elif type_name == 'Family Pension - Conversion of Superannuation':
+                required_fields = ['ppo_number', 'name_pensioner', 'type_of_pension', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']
+            
+            for field in required_fields:
+                if not cleaned_data.get(field):
+                    self.add_error(field, f'This field is required for {type_name}.')
+        return cleaned_data
 
 class CaseMovementForm(forms.Form):
     MOVEMENT_CHOICES = [
