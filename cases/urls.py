@@ -15,4 +15,6 @@ urlpatterns = [
     path('api/sub_categories/', views.get_sub_categories, name='get_sub_categories'),
     path('api/retiring_employee/', views.get_retiring_employee_data, name='get_retiring_employee_data'),
     path('api/retiring_employees_by_month_year/', views.get_retiring_employees_by_month_year, name='get_retiring_employees_by_month_year'),
+    path('get-ppo-data/', views.get_ppo_data, name='get_ppo_data'),
+    path('get-retiring-employee-data/', views.get_retiring_employee_data, name='get_retiring_employee_data'),
 ]

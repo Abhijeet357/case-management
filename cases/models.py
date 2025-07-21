@@ -1,4 +1,4 @@
-# cases/models.py (updated created_by to allow null=True, blank=True for flexibility)
+# cases/models.py (updated with dashboard filtering and PPO improvements)
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -7,12 +7,27 @@ from django.core.validators import RegexValidator
 import uuid
 from simple_history.models import HistoricalRecords
 from dateutil.relativedelta import relativedelta
+from django.utils import timezone
+from django.core.validators import RegexValidator
+from django.db.models import Q
 
 WORKFLOW_STAGES = {
     'Type_A': ['DH', 'AAO', 'AO'],
     'Type_B': ['DH', 'AAO', 'AO', 'Jt.CCA'],
     'Type_C': ['DH', 'AAO', 'AO', 'Jt.CCA', 'CCA'],
     'Type_Extended': ['DH', 'AAO', 'AO', 'Dy.CCA', 'Jt.CCA', 'CCA', 'Pr.CCA']
+}
+
+# Role hierarchy for dashboard filtering
+ROLE_HIERARCHY = {
+    'Pr.CCA': ['CCA', 'Jt.CCA', 'Dy.CCA', 'AO', 'AAO', 'DH'],
+    'CCA': ['Jt.CCA', 'Dy.CCA', 'AO', 'AAO', 'DH'],
+    'Jt.CCA': ['Dy.CCA', 'AO', 'AAO', 'DH'],
+    'Dy.CCA': ['AO', 'AAO', 'DH'],
+    'AO': ['AAO', 'DH'],
+    'AAO': ['DH'],
+    'DH': [],
+    'ADMIN': ['Pr.CCA', 'CCA', 'Jt.CCA', 'Dy.CCA', 'AO', 'AAO', 'DH'],
 }
 
 def get_workflow_for_case(case):
@@ -30,6 +45,25 @@ def get_status_color(stage, priority):
         return 'Orange'
     else:
         return 'Green'
+
+def get_subordinate_roles(user_role):
+    """Get list of subordinate roles for a given user role"""
+    return ROLE_HIERARCHY.get(user_role, [])
+
+def get_dashboard_cases_query(user_profile):
+    """
+    Get queryset for dashboard cases based on user role hierarchy
+    """
+    user_role = user_profile.role
+    subordinate_roles = get_subordinate_roles(user_role)
+    
+    # Include cases assigned to user and all subordinate roles
+    roles_to_include = [user_role] + subordinate_roles
+    
+    return Case.objects.filter(
+        current_holder__role__in=roles_to_include,
+        is_completed=False
+    )
 
 class UserProfile(models.Model):
     ROLE_CHOICES = [
@@ -50,26 +84,120 @@ class UserProfile(models.Model):
     is_active_holder = models.BooleanField(default=True)
     
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username} ({self.get_role_display()})"
+    
+    def get_dashboard_cases(self):
+        """Get cases for dashboard based on role hierarchy"""
+        return get_dashboard_cases_query(self)
+    
+    def get_subordinate_roles(self):
+        """Get list of subordinate roles"""
+        return get_subordinate_roles(self.role)
+    
+    def can_view_case(self, case):
+        """Check if user can view a specific case based on hierarchy"""
+        user_role = self.role
+        case_holder_role = case.current_holder.role
+        subordinate_roles = get_subordinate_roles(user_role)
+        
+        return (
+            case_holder_role == user_role or 
+            case_holder_role in subordinate_roles or
+            user_role == 'ADMIN'
+        )
 
 class PPOMaster(models.Model):
-    ppo_number = models.CharField(max_length=20, unique=True, db_index=True)
-    name = models.CharField(max_length=200)
-    designation = models.CharField(max_length=100)
-    department = models.CharField(max_length=100)
-    pension_type = models.CharField(max_length=50)
-    retirement_date = models.DateField()
-    bank_name = models.CharField(max_length=100)
-    account_number = models.CharField(max_length=20)
-    branch_code = models.CharField(max_length=20)
-    address = models.TextField()
-    phone = models.CharField(max_length=15, blank=True)
-    email = models.EmailField(blank=True)
+    pension_case_number = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True)  # PNSN_CASE_NO
+    ppo_number = models.CharField(max_length=20, unique=True, db_index=True)  # PPO_NO
+    pension_type = models.CharField(max_length=50)  # PNSN_TYP
+    employee_number = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True)
+    employee_name = models.CharField(max_length=200)  # EMP_NM
+    date_of_retirement = models.DateField(null=True, blank=True)   # Date_of_retirement
+    date_of_birth = models.DateField(null=True, blank=True)  # date_of_birth
+    date_of_death_pensioner = models.DateField(null=True, blank=True)  # date_of_death_Pensioner
+    date_of_death_family_pensioner = models.DateField(null=True, blank=True)  # date_of_death_FP
+    nominee_name = models.CharField(max_length=200, blank=True, null=True)  # NOMINE_NM
+    relationship_with_pensioner = models.CharField(max_length=50, blank=True, null=True)  # Relationship_with_the_pensioner
+    bank_sort_code = models.CharField(max_length=20, blank=True, null=True)  # BANK_SORT_CD
+    account_number = models.CharField(max_length=20, blank=True, null=True)  # ACCT_NO
+    
+    # Fields with validators removed - now simple CharField with blank=True, null=True
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    aadhaar_number = models.CharField(max_length=12, blank=True, null=True)  # AADHAAR_NO
+    mobile_number = models.CharField(max_length=15, blank=True, null=True)  # MOB_NO
+    it_pan = models.CharField(max_length=10, blank=True, null=True)  # IT_PAN
+    ifsc_code = models.CharField(max_length=11, blank=True, null=True)  # IFSC_CODE
+    
+    # Existing fields (kept for compatibility)
+    department = models.CharField(max_length=100, blank=True, null=True)
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    branch_code = models.CharField(max_length=20, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
+    # Audit/history
+    history = HistoricalRecords()
+
     def __str__(self):
-        return f"{self.ppo_number} - {self.name}"
+        return f"{self.ppo_number} - {self.employee_name}"
+    
+    @classmethod
+    def get_by_ppo_number(cls, ppo_number):
+        """Get PPO Master by PPO number with error handling"""
+        try:
+            return cls.objects.get(ppo_number=ppo_number)
+        except cls.DoesNotExist:
+            return None
+        except cls.MultipleObjectsReturned:
+            # Return the first one if multiple exist (shouldn't happen with unique constraint)
+            return cls.objects.filter(ppo_number=ppo_number).first()
+    
+    @classmethod
+    def search_ppo(cls, query):
+        """Search PPO by number, employee name, or employee number"""
+        if not query:
+            return cls.objects.none()
+        
+        return cls.objects.filter(
+            Q(ppo_number__icontains=query) |
+            Q(employee_name__icontains=query) |
+            Q(employee_number__icontains=query) |
+            Q(pension_case_number__icontains=query)
+        ).distinct()
+    
+    def get_full_details(self):
+        """Get complete PPO details for case registration"""
+        return {
+            'ppo_number': self.ppo_number,
+            'employee_name': self.employee_name,
+            'employee_number': self.employee_number,
+            'pension_type': self.pension_type,
+            'date_of_retirement': self.date_of_retirement,
+            'date_of_birth': self.date_of_birth,
+            'mobile_number': self.mobile_number,
+            'designation': self.designation,
+            'department': self.department,
+            'bank_name': self.bank_name,
+            'account_number': self.account_number,
+            'ifsc_code': self.ifsc_code,
+            'address': self.address,
+            'email': self.email,
+            'nominee_name': self.nominee_name,
+            'relationship_with_pensioner': self.relationship_with_pensioner,
+        }
+
+    class Meta:
+        ordering = ['-date_of_retirement']
+        verbose_name = 'PPO Master'
+        verbose_name_plural = 'PPO Masters'
+        indexes = [
+            models.Index(fields=['ppo_number']),
+            models.Index(fields=['employee_number']),
+            models.Index(fields=['employee_name']),
+            models.Index(fields=['pension_case_number']),
+        ]
 
 class RetiringEmployee(models.Model):
     employee_id = models.CharField(max_length=20, unique=True, db_index=True)
@@ -134,23 +262,23 @@ class RetiringEmployee(models.Model):
             # Generate unique PPO number
             year = self.retirement_date.year
             count = PPOMaster.objects.filter(
-                retirement_date__year=year
+                date_of_retirement__year=year
             ).count() + 1
             
             ppo_number = f"PPO/{year}/{count:04d}"
             
             ppo_master = PPOMaster.objects.create(
                 ppo_number=ppo_number,
-                name=self.name,
+                employee_name=self.name,  # Fixed field name
                 designation=self.designation,
                 department=self.department,
-                pension_type='Superannuation',  # Default, can be customized
-                retirement_date=self.retirement_date,
+                pension_type='Superannuation',
+                date_of_retirement=self.retirement_date,
                 bank_name=self.bank_name,
                 account_number=self.account_number,
                 branch_code=self.ifsc_code,
                 address=self.address,
-                phone=self.phone,
+                mobile_number=self.phone,  # Fixed field name
                 email=self.email
             )
             
@@ -164,12 +292,12 @@ class RetiringEmployee(models.Model):
 class FamilyMember(models.Model):
     ppo_master = models.ForeignKey(PPOMaster, on_delete=models.CASCADE, related_name='family_members')
     name = models.CharField(max_length=200)
-    relationship = models.CharField(max_length=50, choices=[('spouse', 'Spouse'), ('child', 'Child'), ('parent', 'Parent')])  # Add more as needed
-    birth_date = models.DateField(null=True, blank=True)  # For age eligibility
+    relationship = models.CharField(max_length=50, choices=[('spouse', 'Spouse'), ('child', 'Child'), ('parent', 'Parent')])
+    birth_date = models.DateField(null=True, blank=True)
     is_eligible = models.BooleanField(default=False, help_text="Eligible for family pension")
     eligibility_reason = models.TextField(blank=True)
     
-    history = HistoricalRecords()  # Track changes
+    history = HistoricalRecords()
     
     def __str__(self):
         return f"{self.name} ({self.relationship}) for {self.ppo_master.ppo_number}"
@@ -214,6 +342,33 @@ class CaseType(models.Model):
     
     def get_sub_categories_list(self):
         return [cat.strip() for cat in self.sub_categories.split(',') if cat.strip()]
+
+class CaseQuerySet(models.QuerySet):
+    def for_user_dashboard(self, user_profile):
+        """Filter cases for user dashboard based on role hierarchy"""
+        return get_dashboard_cases_query(user_profile)
+    
+    def pending_cases(self):
+        """Get all pending (non-completed) cases"""
+        return self.filter(is_completed=False)
+    
+    def by_priority(self, priority):
+        """Filter cases by priority"""
+        return self.filter(priority=priority)
+    
+    def by_status_color(self, color):
+        """Filter cases by status color"""
+        return self.filter(status_color=color)
+
+class CaseManager(models.Manager):
+    def get_queryset(self):
+        return CaseQuerySet(self.model, using=self._db)
+    
+    def for_user_dashboard(self, user_profile):
+        return self.get_queryset().for_user_dashboard(user_profile)
+    
+    def pending_cases(self):
+        return self.get_queryset().pending_cases()
 
 class Case(models.Model):
     PRIORITY_CHOICES = [
@@ -266,7 +421,7 @@ class Case(models.Model):
         ('Family Pensioner', 'Family Pensioner'),
     ]
     
-    # Existing fields
+    # Core fields
     case_id = models.CharField(max_length=50, unique=True, db_index=True)
     registration_date = models.DateTimeField(default=timezone.now)
     case_type = models.ForeignKey(CaseType, on_delete=models.CASCADE)
@@ -288,7 +443,7 @@ class Case(models.Model):
     last_updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_cases')
     last_update_date = models.DateTimeField(auto_now=True)
     
-    # Add the new fields that are referenced in the form
+    # Additional fields
     ppo_number = models.CharField(max_length=20, blank=True)
     name_pensioner = models.CharField(max_length=200, blank=True)
     mobile_number = models.CharField(max_length=15, blank=True)
@@ -306,10 +461,20 @@ class Case(models.Model):
     retiring_employee = models.ForeignKey('RetiringEmployee', on_delete=models.SET_NULL, null=True, blank=True)
     type_of_pension = models.CharField(max_length=20, choices=TYPE_OF_PENSION_CHOICES, blank=True)
     type_of_pensioner = models.CharField(max_length=30, choices=TYPE_OF_PENSIONER_CHOICES, blank=True)
-    date_of_retirement = models.DateField(null=True, blank=True)  # For Superannuation, fetched but stored
+    date_of_retirement = models.DateField(null=True, blank=True)
+    
+    # Custom manager
+    objects = CaseManager()
     
     class Meta:
         ordering = ['-registration_date']
+        indexes = [
+            models.Index(fields=['case_id']),
+            models.Index(fields=['ppo_number']),
+            models.Index(fields=['current_holder', 'is_completed']),
+            models.Index(fields=['priority', 'status_color']),
+            models.Index(fields=['registration_date']),
+        ]
     
     def __str__(self):
         return f"{self.case_id} - {self.case_title}"
@@ -319,7 +484,20 @@ class Case(models.Model):
             self.case_id = self.generate_case_id()
         if not self.expected_completion:
             self.expected_completion = self.calculate_expected_completion()
+        
+        # Auto-populate fields from PPO Master if available
+        if self.ppo_master and not self.ppo_number:
+            self.populate_from_ppo_master()
+        
         super().save(*args, **kwargs)
+    
+    def populate_from_ppo_master(self):
+        """Populate case fields from associated PPO Master"""
+        if self.ppo_master:
+            self.ppo_number = self.ppo_master.ppo_number
+            self.name_pensioner = self.ppo_master.employee_name
+            self.mobile_number = self.ppo_master.mobile_number or ''
+            self.date_of_retirement = self.ppo_master.date_of_retirement
     
     def generate_case_id(self):
         from datetime import datetime
@@ -351,6 +529,10 @@ class Case(models.Model):
             delta = timezone.now() - self.last_update_date
             self.days_in_current_stage = delta.days
             self.save(update_fields=['days_in_current_stage'])
+    
+    def can_be_viewed_by(self, user_profile):
+        """Check if case can be viewed by given user profile"""
+        return user_profile.can_view_case(self)
 
 class CaseMovement(models.Model):
     case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='movements')
@@ -388,7 +570,7 @@ class FamilyPensionClaim(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_family_pension_claims', null=True, blank=True)
     ppo_master = models.ForeignKey(PPOMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name='family_pension_claims')
     
-    history = HistoricalRecords()  # Track changes
+    history = HistoricalRecords()
     
     def __str__(self):
         return f"Claim for {self.case.case_id}"

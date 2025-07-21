@@ -45,22 +45,22 @@ class CaseRegistrationForm(forms.ModelForm):
         current_year = date.today().year
         self.fields['retirement_year'].choices = [(y, str(y)) for y in range(current_year, current_year + 3)]
         
-        # Set retiring_employee to empty queryset initially
-        self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
-        
-        # On POST, populate queryset based on submitted month/year
+        # Set retiring_employee queryset dynamically
+        # On POST, filter based on retirement_month and retirement_year from form data
         if self.data.get('retirement_month') and self.data.get('retirement_year'):
             try:
                 month = int(self.data['retirement_month'])
                 year = int(self.data['retirement_year'])
                 from_date = date(year, month, 1)
-                to_date = from_date + relativedelta(months=1) - timedelta(days=1)
+                to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
                 self.fields['retiring_employee'].queryset = RetiringEmployee.objects.filter(
                     retirement_date__gte=from_date,
                     retirement_date__lte=to_date
                 )
             except ValueError:
-                pass  # Invalid month/year; queryset remains empty, validation will fail
+                self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
+        else:
+            self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -106,6 +106,7 @@ class CaseMovementForm(forms.Form):
     
     def __init__(self, *args, **kwargs):
         case = kwargs.pop('case', None)
+        movement_type = kwargs.get('initial', {}).get('movement_type')  # For pre-pop
         super().__init__(*args, **kwargs)
         
         self.helper = FormHelper()
@@ -117,12 +118,6 @@ class CaseMovementForm(forms.Form):
         )
         
         if case:
-            # Determine movement_type: from data if bound, else from initial
-            if self.is_bound:
-                movement_type = self.data.get('movement_type')
-            else:
-                movement_type = kwargs.get('initial', {}).get('movement_type')
-            
             workflow = get_workflow_for_case(case)
             current_index = get_current_stage_index(case, workflow)
             queryset = UserProfile.objects.none()

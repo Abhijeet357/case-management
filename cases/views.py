@@ -1,4 +1,3 @@
-# cases/views.py (added imports for date, timedelta, relativedelta)
 
 # cases/views.py (ensured imports are at top)
 
@@ -18,7 +17,6 @@ from dateutil.relativedelta import relativedelta
 from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee
 from .forms import CaseRegistrationForm, CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
 
-# ... (rest of the views code remains the same)
 @login_required
 def dashboard(request):
     """Main dashboard view"""
@@ -186,7 +184,7 @@ def register_case(request):
                 try:
                     ppo = PPOMaster.objects.get(ppo_number=ppo_number)
                     case.ppo_master = ppo
-                    case.applicant_name = ppo.name
+                    case.applicant_name = ppo.employee_name  # Updated field
                 except PPOMaster.DoesNotExist:
                     pass
             
@@ -206,12 +204,12 @@ def register_case(request):
                 updated_by=request.user
             )
             
-            # For Death Intimation, create claim (fixed typo and adjusted fields)
+            # For Death Intimation, create claim
             if case.case_type.name == 'Death Intimation':
                 FamilyPensionClaim.objects.create(
                     case=case,
                     claim_received=form.cleaned_data.get('date_of_death'),
-                    eligible_claimant=None,  # No direct field; set to None or create FamilyMember if needed
+                    eligible_claimant=None,
                     ppo_master=case.ppo_master,
                     created_by=request.user
                 )
@@ -370,24 +368,58 @@ def move_case(request, case_id):
         'preview_message': preview_message,
     })
 
+@login_required
 @require_http_methods(["GET"])
 def get_ppo_data(request):
-    ppo_number = request.GET.get('ppo_number')
+    """
+    AJAX view to fetch PPO data based on PPO number
+    """
+    ppo_number = request.GET.get('ppo_number', '').strip()
+    
     if not ppo_number:
-        return JsonResponse({'error': 'No PPO number provided'}, status=400)
+        return JsonResponse({
+            'success': False,
+            'error': 'PPO number is required'
+        })
+    
     try:
-        ppo = PPOMaster.objects.get(ppo_number=ppo_number)
+        # Try to find PPO in PPOMaster
+        ppo_master = PPOMaster.objects.get(ppo_number=ppo_number)
+        
+        # Calculate KYP flag (example logic - adjust as needed)
+        kyp_flag = False
+        if ppo_master.date_of_retirement:
+            # Example: KYP required if retired more than 1 year ago
+            years_since_retirement = (timezone.now().date() - ppo_master.date_of_retirement).days / 365
+            kyp_flag = years_since_retirement > 1
+        
         data = {
-            'name': ppo.name,
-            'designation': ppo.designation,
-            'department': ppo.department,
-            'mobile': ppo.phone,  # Assuming phone is mobile
-            'last_lc': ppo.last_lc_done_date.strftime('%d-%m-%Y') if ppo.last_lc_done_date else '',
-            'kyp': ppo.kyp_flag,
+            'success': True,
+            'data': {
+                'name_pensioner': ppo_master.employee_name or '',
+                'mobile_number': ppo_master.mobile_number or '',
+                'date_of_retirement': ppo_master.date_of_retirement.strftime('%d-%m-%Y') if ppo_master.date_of_retirement else '',
+                'kyp_flag': kyp_flag,
+                'designation': ppo_master.designation or '',
+                'department': ppo_master.department or '',
+                'pension_type': ppo_master.pension_type or '',
+            }
         }
+        
         return JsonResponse(data)
+        
     except PPOMaster.DoesNotExist:
-        return JsonResponse({'error': 'PPO not found'}, status=404)
+        return JsonResponse({
+            'success': False,
+            'error': 'PPO number not found in database'
+        })
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'An error occurred: {str(e)}'
+        })
+
 
 @require_http_methods(["GET"])
 def get_sub_categories(request):

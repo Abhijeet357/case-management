@@ -4,6 +4,7 @@
 {% block title %}Register New Case{% endblock %}
 
 {% block content %}
+
 <h2>Register New Case</h2>
 
 <form method="post" id="case-form">
@@ -21,6 +22,8 @@
     <!-- Conditional field groups -->
     <div id="know-your-pensioner-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.mobile_number|as_crispy_field }}
         {{ form.mode_of_receipt|as_crispy_field }}
@@ -28,6 +31,8 @@
     
     <div id="family-pension-death-in-service-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-fp" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-fp" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
@@ -38,6 +43,8 @@
     
     <div id="family-pension-extended-family-pension-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-efp" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-efp" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
@@ -47,6 +54,8 @@
     
     <div id="life-time-arrears-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-lta" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-lta" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
@@ -57,6 +66,8 @@
     <div id="ppo-correction-fields" class="specific-fields" style="display: none;">
         {{ form.type_of_correction|as_crispy_field }}
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-pc" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-pc" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.original_ppo_submitted|as_crispy_field }}
     </div>
@@ -73,12 +84,16 @@
     
     <div id="fixed-medical-allowance-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-fma" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-fma" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.mobile_number|as_crispy_field }}
     </div>
     
     <div id="death-intimation-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-di" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-di" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.type_of_pension|as_crispy_field }}
         {{ form.type_of_pensioner|as_crispy_field }}
@@ -91,6 +106,8 @@
     
     <div id="family-pension-conversion-of-superannuation-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
+        <button type="button" id="fetch-ppo-btn-fpcs" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <div id="ppo-status-fpcs" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.type_of_pension|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
@@ -106,87 +123,145 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
 $(document).ready(function() {
+    console.log('Document ready - initializing simplified form handlers');
+    
     // Show/hide fields based on case type
     $('#id_case_type').change(function() {
         var selectedText = $('option:selected', this).text().trim().toLowerCase().replace(/ \(.+\)/g, '').replace(/ /g, '-').replace(/-+/g, '-');
-        console.log('Selected case type ID:', selectedText); // For debugging
+        console.log('Selected case type ID:', selectedText);
         $('.specific-fields').hide();
         $('#' + selectedText + '-fields').show();
-        
-        // Load sub-categories
-        var caseTypeId = $(this).val();
-        if (caseTypeId) {
-            $.get('/api/sub_categories/', {case_type_id: caseTypeId}, function(data) {
-                $('#id_sub_category').empty();
-                $('#id_sub_category').append('<option value="">Select Sub-Category</option>');
-                $.each(data.sub_categories, function(index, cat) {
-                    $('#id_sub_category').append('<option value="' + cat + '">' + cat + '</option>');
-                });
-            }).fail(function() {
-                console.error('Failed to load sub-categories');
-            });
-        }
     });
     
-    // Fetch PPO data
-    $('#id_ppo_number').change(function() {
-        var ppoNumber = $(this).val();
-        if (ppoNumber) {
-            $.get('/api/ppo/', {ppo_number: ppoNumber}, function(data) {
-                console.log('PPO data received:', data); // Debug
-                if (!data.error) {
-                    $('#id_name_pensioner').val(data.name);
-                    $('#id_mobile_number').val(data.mobile);
-                    // Add more fields like last_lc_done_date, kyp_flag if returned by API
-                } else {
-                    console.error('PPO error:', data.error);
-                }
-            }).fail(function() {
-                console.error('Failed to load PPO data');
-            });
+    // Simplified PPO data fetcher - only name and retirement date
+    function fetchPPOData(ppoInputId, statusDivId) {
+        var ppoNumber = $(ppoInputId).val().trim();
+        console.log('Fetching PPO data for:', ppoNumber);
+        
+        if (!ppoNumber) {
+            $(statusDivId).html('<div class="alert alert-warning">Please enter a PPO number</div>');
+            return;
         }
+        
+        $(statusDivId).html('<div class="alert alert-info">Fetching PPO data...</div>');
+        
+        $.ajax({
+            url: '{% url "get_ppo_data" %}',
+            type: 'GET',
+            data: { ppo_number: ppoNumber },
+            success: function(response) {
+                console.log('PPO API response:', response);
+                
+                if (response.success && response.data) {
+                    var data = response.data;
+                    
+                    // Only update name and retirement date
+                    var nameField = $('#id_name_pensioner');
+                    var retirementDateField = $('#id_date_of_retirement');
+                    
+                    var updatedFields = [];
+                    
+                    // Update pensioner name
+                    if (nameField.length && data.name_pensioner) {
+                        nameField.val(data.name_pensioner.trim());
+                        updatedFields.push('Name: ' + data.name_pensioner);
+                        console.log('Updated name field with:', data.name_pensioner);
+                    }
+                    
+                    // Update retirement date
+                    if (retirementDateField.length && data.date_of_retirement) {
+                        retirementDateField.val(data.date_of_retirement);
+                        updatedFields.push('Retirement Date: ' + data.date_of_retirement);
+                        console.log('Updated retirement date field with:', data.date_of_retirement);
+                    }
+                    
+                    // Show success message
+                    if (updatedFields.length > 0) {
+                        var successMsg = 'PPO data fetched successfully!<br>' + updatedFields.join('<br>');
+                        $(statusDivId).html('<div class="alert alert-success">' + successMsg + '</div>');
+                    } else {
+                        $(statusDivId).html('<div class="alert alert-warning">PPO found but no name/retirement date available</div>');
+                    }
+                    
+                    // Auto-hide message after 3 seconds
+                    setTimeout(function() {
+                        $(statusDivId).fadeOut();
+                    }, 3000);
+                    
+                } else {
+                    console.error('API error:', response.error);
+                    var errorMsg = response.error || 'No data found for this PPO number';
+                    $(statusDivId).html('<div class="alert alert-danger">' + errorMsg + '</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                $(statusDivId).html('<div class="alert alert-danger">Failed to fetch PPO data. Please try again.</div>');
+            }
+        });
+    }
+    
+    // Bind all PPO fetch buttons to the same simplified function
+    $('#fetch-ppo-btn, #fetch-ppo-btn-fp, #fetch-ppo-btn-efp, #fetch-ppo-btn-lta, #fetch-ppo-btn-pc, #fetch-ppo-btn-fma, #fetch-ppo-btn-di, #fetch-ppo-btn-fpcs').click(function(e) {
+        e.preventDefault();
+        
+        // Find the corresponding status div based on button ID
+        var buttonId = $(this).attr('id');
+        var statusDiv = '#ppo-status';
+        
+        if (buttonId.includes('-fp')) statusDiv = '#ppo-status-fp';
+        else if (buttonId.includes('-efp')) statusDiv = '#ppo-status-efp';
+        else if (buttonId.includes('-lta')) statusDiv = '#ppo-status-lta';
+        else if (buttonId.includes('-pc')) statusDiv = '#ppo-status-pc';
+        else if (buttonId.includes('-fma')) statusDiv = '#ppo-status-fma';
+        else if (buttonId.includes('-di')) statusDiv = '#ppo-status-di';
+        else if (buttonId.includes('-fpcs')) statusDiv = '#ppo-status-fpcs';
+        
+        console.log('PPO fetch button clicked:', buttonId, 'Status div:', statusDiv);
+        fetchPPOData('#id_ppo_number', statusDiv);
     });
     
     // For Superannuation: Fetch retiring employees on month/year change
     $('#id_retirement_month, #id_retirement_year').change(function() {
         var month = $('#id_retirement_month').val();
         var year = $('#id_retirement_year').val();
-        console.log('Selected month/year:', month, year); // Debug
+        
         if (month && year) {
-            $.get('/api/retiring_employees_by_month_year/', {month: month, year: year}, function(data) {
-                console.log('Employees received:', data.employees); // Debug
-                $('#id_retiring_employee').empty();
-                $('#id_retiring_employee').append('<option value="">Select Employee</option>');
-                $.each(data.employees, function(index, emp) {
-                    $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
+            $.get('/get-retiring-employees-by-month-year/', {month: month, year: year})
+                .done(function(data) {
+                    $('#id_retiring_employee').empty();
+                    $('#id_retiring_employee').append('<option value="">Select Employee</option>');
+                    $.each(data.employees, function(index, emp) {
+                        $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
+                    });
+                })
+                .fail(function() {
+                    console.warn('Failed to load retiring employees');
                 });
-            }).fail(function(jqXHR, textStatus, errorThrown) {
-                console.error('Failed to load retiring employees:', textStatus, errorThrown, jqXHR.responseText);
-            });
         }
     });
     
     // Fetch retiring employee data (date)
     $('#id_retiring_employee').change(function() {
         var employeeId = $(this).val();
-        console.log('Selected employee ID:', employeeId); // Debug
+        
         if (employeeId) {
-            $.get('/api/retiring_employee/', {employee_id: employeeId}, function(data) {
-                console.log('Employee data received:', data); // Debug
-                if (!data.error) {
-                    $('#id_date_of_retirement').val(data.retirement_date);
-                } else {
-                    console.error('Employee error:', data.error);
-                }
-            }).fail(function() {
-                console.error('Failed to load retiring employee data');
-            });
+            $.get('/get-retiring-employee-data/', {employee_id: employeeId})
+                .done(function(data) {
+                    if (!data.error && data.retirement_date) {
+                        $('#id_date_of_retirement').val(data.retirement_date);
+                    }
+                })
+                .fail(function() {
+                    console.warn('Failed to load retiring employee data');
+                });
         }
     });
     
-    // Trigger initial change if editing existing
-    $('#id_case_type').change();
+    // Trigger initial change
+    $('#id_case_type').trigger('change');
 });
+
 </script>
 
 {% endblock %}
