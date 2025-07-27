@@ -4,135 +4,236 @@
 {% block title %}Register New Case{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Register New Case</h2>
-    <form method="post" id="registrationForm">
-        {% csrf_token %}
-        {{ form|crispy }}
-        <button type="submit" class="btn btn-primary">Done</button>
-    </form>
-</div>
+<h2>Register New Case</h2>
 
+<form method="post" class="container mt-4">
+    {% csrf_token %}
+    
+    <!-- Case Type and Priority -->
+    <div class="mb-3">
+        {{ form.case_type|as_crispy_field }}
+        {{ form.sub_category|as_crispy_field }}
+    </div>
+    
+    <div class="mb-3">
+        {{ form.priority|as_crispy_field }}
+    </div>
+
+    <div class="mb-3">
+        {{ form.initial_holder|as_crispy_field }}
+    </div>
+    
+    <!-- Conditional Sections -->
+    <div id="kyp-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.mode_of_receipt|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-death-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-extended-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="lta-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="ppo-correction-section" class="form-section" style="display: none;">
+        {{ form.type_of_correction|as_crispy_field }}
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.original_ppo_submitted|as_crispy_field }}
+    </div>
+    
+    <div id="superannuation-section" class="form-section" style="display: none;">
+        {{ form.retirement_month|as_crispy_field }}
+        {{ form.retirement_year|as_crispy_field }}
+        {{ form.fresh_or_compliance|as_crispy_field }}
+        {{ form.type_of_employee|as_crispy_field }}
+        {{ form.retiring_employee|as_crispy_field }}
+        {{ form.date_of_retirement|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="fma-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+    </div>
+    
+    <div id="death-intimation-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.type_of_pension|as_crispy_field }}
+        {{ form.type_of_pensioner|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <div id="family-pension-conversion-section" class="form-section" style="display: none;">
+        {{ form.ppo_number|as_crispy_field }}
+        <button type="button" class="fetch-ppo-btn btn btn-primary">Fetch PPO Data</button>
+        <button type="button" class="confirm-ppo-btn btn btn-success" style="display: none;">Confirm PPO Details</button>
+        {{ form.name_pensioner|as_crispy_field }}
+        {{ form.type_of_pension|as_crispy_field }}
+        {{ form.date_of_death|as_crispy_field }}
+        {{ form.name_claimant|as_crispy_field }}
+        {{ form.relationship|as_crispy_field }}
+        {{ form.mobile_number|as_crispy_field }}
+        {{ form.service_book_enclosed|as_crispy_field }}
+    </div>
+    
+    <button type="submit" class="btn btn-primary" disabled>Done</button>
+</form>
+
+<!-- JavaScript for Dynamic Behavior -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const form = document.getElementById('registrationForm');
-        const fields = {
-            ppo_number: 'ppo_number',
-            name_pensioner: 'name_pensioner',
-            mobile_number: 'mobile_number',
-            last_lc_done_date: 'last_lc_done_date',
-            kyp_flag: 'kyp_flag',
-            mode_of_receipt: 'mode_of_receipt',
-            date_of_death: 'date_of_death',
-            name_claimant: 'name_claimant',
-            relationship: 'relationship',
-            service_book_enclosed: 'service_book_enclosed',
-            type_of_correction: 'type_of_correction',
-            original_ppo_submitted: 'original_ppo_submitted',
-            fresh_or_compliance: 'fresh_or_compliance',
-            type_of_employee: 'type_of_employee',
-            retiring_employee: 'retiring_employee',
+$(document).ready(function() {
+    console.log('JS loaded - form handlers initialized.');
+    
+    var ppoUrl = "{% url 'get_ppo_data' %}";  // Resolves to /api/ppo/
+    var subCatUrl = "{% url 'get_sub_categories' %}";  // Resolves to /api/sub_categories/
+    console.log('PPO URL: ' + ppoUrl + ', Sub-Cat URL: ' + subCatUrl);
+    
+    // Case type change: Show section and fetch sub-categories
+    $('#id_case_type').on('change', function() {
+        var caseTypeId = $(this).val();
+        var caseTypeName = $(this).find('option:selected').text().trim();
+        console.log('Case type: ID=' + caseTypeId + ', Name=' + caseTypeName);
+        
+        // Hide all sections
+        $('.form-section').hide();
+        
+        // Map case type to section ID
+        var sectionMap = {
+            'Know Your Pensioner (KYP)': '#kyp-section',
+            'Family Pension - Death in Service': '#family-pension-death-section',
+            'Family Pension - Extended Family Pension': '#family-pension-extended-section',
+            'Life Time Arrears (LTA)': '#lta-section',
+            'PPO Correction': '#ppo-correction-section',
+            'Superannuation': '#superannuation-section',
+            'Fixed Medical Allowance (FMA)': '#fma-section',
+            'Death Intimation': '#death-intimation-section',
+            'Family Pension - Conversion of Superannuation': '#family-pension-conversion-section'
         };
-
-        const getField = (name) => form.querySelector(`[name="${name}"]`);
-        const showFields = (fieldNames) => {
-            for (const key in fields) {
-                const fieldElement = getField(fields[key]);
-                if (!fieldElement) continue;
-                const container = fieldElement.closest('.form-group') || fieldElement.parentElement;
-                if (fieldNames.includes(fields[key])) {
-                    container.style.display = 'block';
-                    fieldElement.required = true;
-                } else {
-                    container.style.display = 'none';
-                    fieldElement.required = false;
-                }
-            }
-        };
-
-        const caseTypeSelect = getField('case_type');
-        const subCategorySelect = getField('sub_category');
-
-        function handleFieldVisibility() {
-            const type = caseTypeSelect.options[caseTypeSelect.selectedIndex]?.text || '';
-            const sub = subCategorySelect.options[subCategorySelect.selectedIndex]?.text || '';
-
-            // Default: hide all
-            showFields([]);
-
-            if (type === 'DLC') {
-                showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'last_lc_done_date', 'kyp_flag']);
-            } else if (type === 'KYP') {
-                showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
-            } else if (type === 'Dak Section (Pension)') {
-                switch (sub) {
-                    case 'KYP Received by Post or by hand at Receipt Section':
-                        showFields(['ppo_number', 'name_pensioner', 'mobile_number', 'mode_of_receipt']);
-                        break;
-                    case 'Family Pension Case (Death In Service)':
-                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number', 'service_book_enclosed']);
-                        break;
-                    case 'Family Pension Case (Extended Family Pension)':
-                    case 'LTA':
-                        showFields(['ppo_number', 'name_pensioner', 'date_of_death', 'name_claimant', 'relationship', 'mobile_number']);
-                        break;
-                    case 'PPO Correction':
-                        showFields(['type_of_correction', 'ppo_number', 'name_pensioner', 'original_ppo_submitted']);
-                        break;
-                    case 'Superannuation':
-                        showFields(['fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'service_book_enclosed']);
-                        loadRetiringEmployees();  // Fetch via AJAX if needed
-                        break;
-                    case 'FMA':
-                        showFields(['ppo_number', 'name_pensioner', 'mobile_number']);
-                        break;
-                }
-            }
+        
+        var sectionId = sectionMap[caseTypeName] || '';
+        if (sectionId) {
+            $(sectionId).show();
+            console.log('Showing section: ' + sectionId);
+        } else {
+            console.log('No section for type: ' + caseTypeName);
         }
-
-        // AJAX fetch PPO details
-        const ppoField = getField('ppo_number');
-        const namePensionerField = getField('name_pensioner');
-        const mobileField = getField('mobile_number');
-        const lastLcField = getField('last_lc_done_date');
-        const kypField = getField('kyp_flag');
-
-        ppoField.addEventListener('blur', function () {
-            if (ppoField.value) {
-                fetch(`/api/ppo/?ppo_number=${ppoField.value}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (!data.error) {
-                            namePensionerField.value = data.name || '';
-                            mobileField.value = data.mobile || '';
-                            lastLcField.value = data.last_lc || '';
-                            kypField.checked = !!data.kyp;
-                        }
+        
+        // Fetch sub-categories
+        if (caseTypeId) {
+            $.ajax({
+                url: subCatUrl,
+                type: 'GET',
+                data: { case_type_id: caseTypeId },
+                success: function(response) {
+                    console.log('Sub-categories: ', response.sub_categories);
+                    var options = '<option value="">Select Sub-Category</option>';
+                    response.sub_categories.forEach(function(cat) {
+                        options += '<option value="' + cat + '">' + cat + '</option>';
                     });
-            }
-        });
-
-        // Load Retiring Employees for Superannuation
-        const retiringEmployeeField = getField('retiring_employee');
-
-        function loadRetiringEmployees() {
-            fetch('/api/retiring_employees/')
-                .then(res => res.json())
-                .then(data => {
-                    retiringEmployeeField.innerHTML = '';
-                    data.employees.forEach(emp => {
-                        const opt = document.createElement('option');
-                        opt.value = emp.id;
-                        opt.text = emp.name;
-                        retiringEmployeeField.appendChild(opt);
-                    });
-                });
+                    $('#id_sub_category').html(options);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Sub-cat error: ', status, error, xhr.responseText);
+                    alert('Failed to load sub-categories.');
+                }
+            });
         }
-
-        caseTypeSelect.addEventListener('change', handleFieldVisibility);
-        subCategorySelect.addEventListener('change', handleFieldVisibility);
-
-        handleFieldVisibility();  // Initial call
     });
+    
+    // PPO Fetch
+    $('.fetch-ppo-btn').on('click', function() {
+        var section = $(this).closest('.form-section');
+        var ppoNumber = section.find('#id_ppo_number').val().trim();
+        console.log('Fetching PPO: ' + ppoNumber);
+        
+        if (ppoNumber) {
+            $.ajax({
+                url: ppoUrl,
+                type: 'GET',
+                data: { ppo_number: ppoNumber },
+                success: function(response) {
+                    console.log('PPO response: ', response);
+                    if (response.success) {
+                        var data = response.data;
+                        section.find('#id_name_pensioner').val(data.name_pensioner || '');
+                        console.log('Set name_pensioner: ' + data.name_pensioner);
+                        section.find('#id_mobile_number').val(data.mobile_number || '');
+                        console.log('Set mobile_number: ' + data.mobile_number);
+                        section.find('#id_date_of_retirement').val(data.date_of_retirement || '');
+                        section.find('#id_kyp_flag').prop('checked', data.kyp_flag || false);
+                        section.find('.confirm-ppo-btn').show();
+                        alert('PPO details fetched successfully!');
+                    } else {
+                        alert('Error: ' + response.error);
+                        section.find('.confirm-ppo-btn').hide();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('PPO fetch error: ', status, error, xhr.responseText);
+                    alert('Failed to fetch PPO details.');
+                }
+            });
+        } else {
+            alert('Please enter a PPO number.');
+        }
+    });
+    
+    // Confirm PPO
+    $('.confirm-ppo-btn').on('click', function() {
+        var section = $(this).closest('.form-section');
+        console.log('Confirming PPO details.');
+        section.find('#id_name_pensioner, #id_mobile_number, #id_date_of_retirement').attr('readonly', true);
+        section.find('#id_kyp_flag').attr('disabled', true);
+        $('button[type="submit"]').prop('disabled', false);
+        alert('PPO details confirmed.');
+        $(this).hide();
+    });
+});
 </script>
 {% endblock %}

@@ -1,5 +1,4 @@
-
-# cases/views.py (ensured imports are at top)
+# cases/views.py (updated with fixes)
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -373,6 +372,7 @@ def move_case(request, case_id):
 def get_ppo_data(request):
     """
     AJAX view to fetch PPO data based on PPO number
+    Returns: name_pensioner, pensioner_type, date_of_retirement, mobile_number
     """
     ppo_number = request.GET.get('ppo_number', '').strip()
     
@@ -386,23 +386,26 @@ def get_ppo_data(request):
         # Try to find PPO in PPOMaster
         ppo_master = PPOMaster.objects.get(ppo_number=ppo_number)
         
-        # Calculate KYP flag (example logic - adjust as needed)
-        kyp_flag = False
+        # Format date_of_retirement to dd-mm-yyyy format
+        formatted_retirement_date = ''
         if ppo_master.date_of_retirement:
-            # Example: KYP required if retired more than 1 year ago
-            years_since_retirement = (timezone.now().date() - ppo_master.date_of_retirement).days / 365
-            kyp_flag = years_since_retirement > 1
+            formatted_retirement_date = ppo_master.date_of_retirement.strftime('%d-%m-%Y')
         
+        # Format date_of_death if it exists
+        formatted_death_date = ''
+        if hasattr(ppo_master, 'date_of_death') and ppo_master.date_of_death:
+            formatted_death_date = ppo_master.date_of_death.strftime('%d-%m-%Y')
+        
+        # Prepare data - handle null values gracefully
         data = {
             'success': True,
             'data': {
-                'name_pensioner': ppo_master.employee_name or '',
-                'mobile_number': ppo_master.mobile_number or '',
-                'date_of_retirement': ppo_master.date_of_retirement.strftime('%d-%m-%Y') if ppo_master.date_of_retirement else '',
-                'kyp_flag': kyp_flag,
-                'designation': ppo_master.designation or '',
-                'department': ppo_master.department or '',
-                'pension_type': ppo_master.pension_type or '',
+                'name_pensioner': ppo_master.employee_name.strip() if ppo_master.employee_name else '',
+                'pensioner_type': ppo_master.type_of_pensioner.strip() if hasattr(ppo_master, 'type_of_pensioner') and ppo_master.type_of_pensioner else '',
+                'date_of_retirement': formatted_retirement_date,
+                'mobile_number': ppo_master.mobile_number.strip() if ppo_master.mobile_number else '',
+                'pension_type': ppo_master.pension_type.strip() if ppo_master.pension_type else '',
+                'date_of_death': formatted_death_date,
             }
         }
         
@@ -417,9 +420,8 @@ def get_ppo_data(request):
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'error': f'An error occurred: {str(e)}'
+            'error': f'An error occurred while fetching PPO data: {str(e)}'
         })
-
 
 @require_http_methods(["GET"])
 def get_sub_categories(request):
@@ -435,38 +437,132 @@ def get_sub_categories(request):
 
 @require_http_methods(["GET"])
 def get_retiring_employee_data(request):
+    """
+    AJAX view to fetch retiring employee data based on employee ID
+    """
     employee_id = request.GET.get('employee_id')
+    
     if not employee_id:
         return JsonResponse({'error': 'No employee ID provided'}, status=400)
+    
     try:
         employee = RetiringEmployee.objects.get(id=employee_id)
+        
+        # Format retirement date to dd-mm-yyyy format
+        formatted_retirement_date = ''
+        if employee.retirement_date:
+            formatted_retirement_date = employee.retirement_date.strftime('%d-%m-%Y')
+        
         data = {
-            'retirement_date': employee.retirement_date.strftime('%d-%m-%Y') if employee.retirement_date else '',
-            # Add more fields if needed, e.g., name if not already selected
+            'retirement_date': formatted_retirement_date,
+            'employee_name': employee.name if hasattr(employee, 'name') else '',
+            'employee_id': employee.employee_id if hasattr(employee, 'employee_id') else '',
         }
+        
         return JsonResponse(data)
+        
     except RetiringEmployee.DoesNotExist:
         return JsonResponse({'error': 'Employee not found'}, status=404)
+    
+    except Exception as e:
+        return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
+
+# Updated get_retiring_employee_data function with better error handling and debugging
+
+@require_http_methods(["GET"])
+def get_retiring_employee_data(request):
+    """
+    AJAX view to fetch retiring employee data based on employee ID
+    """
+    employee_id = request.GET.get('employee_id')
+    
+    if not employee_id:
+        return JsonResponse({'error': 'No employee ID provided'}, status=400)
+    
+    try:
+        employee = RetiringEmployee.objects.get(id=employee_id)
+        
+        # Format retirement date to dd-mm-yyyy format
+        formatted_retirement_date = ''
+        if employee.retirement_date:
+            formatted_retirement_date = employee.retirement_date.strftime('%d-%m-%Y')
+        
+        data = {
+            'retirement_date': formatted_retirement_date,
+            'employee_name': employee.name if hasattr(employee, 'name') else '',
+            'employee_id': employee.employee_id if hasattr(employee, 'employee_id') else '',
+        }
+        
+        return JsonResponse(data)
+        
+    except RetiringEmployee.DoesNotExist:
+        return JsonResponse({'error': 'Employee not found'}, status=404)
+    
+    except Exception as e:
+        # Add more detailed error logging
+        import traceback
+        print(f"Error in get_retiring_employee_data: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
 
 @require_http_methods(["GET"])
 def get_retiring_employees_by_month_year(request):
+    """
+    AJAX view to get retiring employees by month and year - with enhanced debugging
+    """
     month = request.GET.get('month')
     year = request.GET.get('year')
+    
+    print(f"DEBUG: Received month={month}, year={year}")  # Debug log
+    
     if not month or not year:
-        return JsonResponse({'employees': []})
+        print("DEBUG: Missing month or year parameter")
+        return JsonResponse({'employees': [], 'error': 'Month and year are required'})
+    
     try:
         month = int(month)
         year = int(year)
+        
+        # Create date range for the specified month and year
         from_date = date(year, month, 1)
-        to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
+        
+        # Get the last day of the month
+        if month == 12:
+            to_date = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            to_date = date(year, month + 1, 1) - timedelta(days=1)
+        
+        print(f"DEBUG: Searching for employees retiring between {from_date} and {to_date}")
+        
+        # Check if RetiringEmployee model exists and has data
+        total_employees = RetiringEmployee.objects.count()
+        print(f"DEBUG: Total employees in database: {total_employees}")
+        
         employees = RetiringEmployee.objects.filter(
             retirement_date__gte=from_date,
             retirement_date__lte=to_date
         ).values('id', 'name')
-        return JsonResponse({'employees': list(employees)})
-    except ValueError:
-        return JsonResponse({'employees': []})
-
+        
+        employee_list = list(employees)
+        print(f"DEBUG: Found {len(employee_list)} employees for {month}/{year}")
+        
+        # If no employees found, let's check what dates are actually in the database
+        if len(employee_list) == 0:
+            sample_dates = RetiringEmployee.objects.values_list('retirement_date', flat=True)[:10]
+            print(f"DEBUG: Sample retirement dates in database: {list(sample_dates)}")
+        
+        return JsonResponse({'employees': employee_list})
+        
+    except ValueError as e:
+        print(f"DEBUG: ValueError - {e}")
+        return JsonResponse({'employees': [], 'error': 'Invalid month or year format'})
+    
+    except Exception as e:
+        import traceback
+        print(f"DEBUG: Exception in get_retiring_employees_by_month_year: {e}")
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        return JsonResponse({'employees': [], 'error': f'Database error: {str(e)}'})
+    
 def register_user(request):
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
@@ -555,3 +651,96 @@ def bulk_import_cases(request):
     else:
         form = BulkImportForm()
     return render(request, 'cases/bulk_import.html', {'form': form})
+
+@login_required
+@require_http_methods(["GET"])
+def get_available_holders(request):
+    """
+    AJAX view to get available holders for case movement
+    """
+    case_id = request.GET.get('case_id')
+    movement_type = request.GET.get('movement_type')
+
+    if not case_id or not movement_type:
+        return JsonResponse({
+            'success': False,
+            'error': 'Case ID and movement type are required'
+        })
+
+    try:
+        case = Case.objects.get(case_id=case_id)
+        workflow = get_workflow_for_case(case)
+        current_index = get_current_stage_index(case, workflow)
+
+        holders = []
+
+        if movement_type == 'forward':
+            if current_index < len(workflow) - 1:
+                next_stage = workflow[current_index + 1]
+                available_holders = UserProfile.objects.filter(
+                    role=next_stage, 
+                    is_active_holder=True
+                ).select_related('user')
+
+                holders = [
+                    {
+                        'id': holder.id,
+                        'name': f"{holder.user.get_full_name() or holder.user.username} ({holder.role})",
+                        'role': holder.role
+                    }
+                    for holder in available_holders
+                ]
+
+        elif movement_type == 'backward':
+            if current_index > 0:
+                prev_stage = workflow[current_index - 1]
+                available_holders = UserProfile.objects.filter(
+                    role=prev_stage, 
+                    is_active_holder=True
+                ).select_related('user')
+
+                holders = [
+                    {
+                        'id': holder.id,
+                        'name': f"{holder.user.get_full_name() or holder.user.username} ({holder.role})",
+                        'role': holder.role
+                    }
+                    for holder in available_holders
+                ]
+
+        elif movement_type == 'reassign':
+            current_stage = case.current_holder.role
+            available_holders = UserProfile.objects.filter(
+                role=current_stage, 
+                is_active_holder=True
+            ).exclude(id=case.current_holder.id).select_related('user')
+
+            holders = [
+                {
+                    'id': holder.id,
+                    'name': f"{holder.user.get_full_name() or holder.user.username} ({holder.role})",
+                    'role': holder.role
+                }
+                for holder in available_holders
+            ]
+
+        elif movement_type == 'complete':
+            # No holders needed for completion
+            holders = []
+
+        return JsonResponse({
+            'success': True,
+            'holders': holders
+        })
+
+    except Case.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Case not found'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'An error occurred: {str(e)}'
+        })

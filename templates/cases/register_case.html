@@ -22,51 +22,79 @@
     <!-- Conditional field groups -->
     <div id="know-your-pensioner-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn" class="btn btn-info btn-sm" data-status-div="#ppo-status">Fetch PPO Data</button>
         <div id="ppo-status" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
         {{ form.mode_of_receipt|as_crispy_field }}
     </div>
     
     <div id="family-pension-death-in-service-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-fp" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-fp" class="btn btn-info btn-sm" data-status-div="#ppo-status-fp">Fetch PPO Data</button>
         <div id="ppo-status-fp" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_fp">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_fp" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
         {{ form.relationship|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
         {{ form.service_book_enclosed|as_crispy_field }}
     </div>
     
     <div id="family-pension-extended-family-pension-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-efp" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-efp" class="btn btn-info btn-sm" data-status-div="#ppo-status-efp">Fetch PPO Data</button>
         <div id="ppo-status-efp" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_efp">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_efp" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
         {{ form.relationship|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
     </div>
     
     <div id="life-time-arrears-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-lta" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-lta" class="btn btn-info btn-sm" data-status-div="#ppo-status-lta">Fetch PPO Data</button>
         <div id="ppo-status-lta" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_lta">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_lta" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
         {{ form.relationship|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
     </div>
     
     <div id="ppo-correction-fields" class="specific-fields" style="display: none;">
         {{ form.type_of_correction|as_crispy_field }}
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-pc" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-pc" class="btn btn-info btn-sm" data-status-div="#ppo-status-pc">Fetch PPO Data</button>
         <div id="ppo-status-pc" class="mt-2"></div>
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.original_ppo_submitted|as_crispy_field }}
@@ -78,43 +106,64 @@
         {{ form.fresh_or_compliance|as_crispy_field }}
         {{ form.type_of_employee|as_crispy_field }}
         {{ form.retiring_employee|as_crispy_field }}
+        <button type="button" id="fetch-employee-btn" class="btn btn-info btn-sm" data-status-div="#employee-status">Fetch Employee Data</button>
+        <div id="employee-status" class="mt-2"></div>
         {{ form.date_of_retirement|as_crispy_field }}
         {{ form.service_book_enclosed|as_crispy_field }}
     </div>
     
     <div id="fixed-medical-allowance-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-fma" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-fma" class="btn btn-info btn-sm" data-status-div="#ppo-status-fma">Fetch PPO Data</button>
         <div id="ppo-status-fma" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_fma">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_fma" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
     </div>
     
     <div id="death-intimation-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-di" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-di" class="btn btn-info btn-sm" data-status-div="#ppo-status-di">Fetch PPO Data</button>
         <div id="ppo-status-di" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_di">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_di" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.type_of_pension|as_crispy_field }}
         {{ form.type_of_pensioner|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
         {{ form.relationship|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
-        {{ form.service_book_enclosed|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
     </div>
     
     <div id="family-pension-conversion-of-superannuation-fields" class="specific-fields" style="display: none;">
         {{ form.ppo_number|as_crispy_field }}
-        <button type="button" id="fetch-ppo-btn-fpcs" class="btn btn-info btn-sm">Fetch PPO Data</button>
+        <button type="button" id="fetch-ppo-btn-fpcs" class="btn btn-info btn-sm" data-status-div="#ppo-status-fpcs">Fetch PPO Data</button>
         <div id="ppo-status-fpcs" class="mt-2"></div>
+        
+        <!-- Read-only registered mobile from PPO -->
+        <div class="form-group">
+            <label for="registered_mobile_display_fpcs">Registered Mobile Number (from PPO)</label>
+            <input type="text" id="registered_mobile_display_fpcs" class="form-control" readonly placeholder="Will be fetched from PPO data">
+        </div>
+        
         {{ form.name_pensioner|as_crispy_field }}
         {{ form.type_of_pension|as_crispy_field }}
         {{ form.date_of_death|as_crispy_field }}
         {{ form.name_claimant|as_crispy_field }}
         {{ form.relationship|as_crispy_field }}
-        {{ form.mobile_number|as_crispy_field }}
-        {{ form.service_book_enclosed|as_crispy_field }}
+        {{ form.manual_mobile|as_crispy_field }}
     </div>
     
     <button type="submit" class="btn btn-primary">Done</button>
@@ -123,7 +172,10 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
 $(document).ready(function() {
-    console.log('Document ready - initializing simplified form handlers');
+    console.log('Document ready - initializing form handlers');
+    
+    // Track fetch button states to prevent multiple requests
+    let fetchInProgress = {};
     
     // Show/hide fields based on case type
     $('#id_case_type').change(function() {
@@ -131,11 +183,34 @@ $(document).ready(function() {
         console.log('Selected case type ID:', selectedText);
         $('.specific-fields').hide();
         $('#' + selectedText + '-fields').show();
+        
+        // Clear any previous fetch status
+        $('.ppo-fetch-status').empty();
+        $('[id^="registered_mobile_display"]').val(''); // Clear registered mobile displays
+        fetchInProgress = {};
     });
     
-    // Enhanced PPO data fetcher with improved field detection
-    function fetchPPOData(ppoInputId, statusDivId) {
-        var ppoNumber = $(ppoInputId).val().trim();
+    // Enhanced PPO data fetcher
+    function fetchPPOData(buttonElement) {
+        var $button = $(buttonElement);
+        var buttonId = $button.attr('id');
+        var statusDivId = $button.data('status-div');
+        
+        // Prevent multiple simultaneous requests
+        if (fetchInProgress[buttonId]) {
+            console.log('Fetch already in progress for', buttonId);
+            return;
+        }
+        
+        // Find the PPO input field in the current visible section
+        var visibleSection = $button.closest('.specific-fields');
+        var ppoInput = visibleSection.find('#id_ppo_number, [name="ppo_number"]').first();
+        
+        if (ppoInput.length === 0) {
+            ppoInput = $('#id_ppo_number, [name="ppo_number"]').first();
+        }
+        
+        var ppoNumber = ppoInput.val().trim();
         console.log('Fetching PPO data for:', ppoNumber);
         
         if (!ppoNumber) {
@@ -143,12 +218,16 @@ $(document).ready(function() {
             return;
         }
         
+        // Set fetch in progress and update UI
+        fetchInProgress[buttonId] = true;
+        $button.prop('disabled', true).text('Fetching...');
         $(statusDivId).html('<div class="alert alert-info">Fetching PPO data...</div>');
         
         $.ajax({
             url: '{% url "get_ppo_data" %}',
             type: 'GET',
             data: { ppo_number: ppoNumber },
+            timeout: 10000, // 10 second timeout
             success: function(response) {
                 console.log('PPO API response:', response);
                 
@@ -157,144 +236,126 @@ $(document).ready(function() {
                     var updatedFields = [];
                     var manualEntryNeeded = [];
                     
-                    // Get the currently visible form section
-                    var visibleSection = $('.specific-fields:visible');
-                    console.log('Visible section:', visibleSection.attr('id'));
-                    
-                    // Update name field - look only in visible section first, then globally
-                    var nameField = null;
-                    if (visibleSection.length > 0) {
-                        nameField = visibleSection.find('#id_name_pensioner, [name="name_pensioner"]').first();
+                    // Update registered mobile display (read-only)
+                    var registeredMobileDisplay = visibleSection.find('[id^="registered_mobile_display"]').first();
+                    if (registeredMobileDisplay.length > 0) {
+                        if (data.mobile_number && data.mobile_number.trim()) {
+                            registeredMobileDisplay.val(data.mobile_number.trim());
+                            registeredMobileDisplay.addClass('field-updated');
+                            updatedFields.push('Registered Mobile: ' + data.mobile_number);
+                        } else {
+                            registeredMobileDisplay.val('Not available in PPO data');
+                            registeredMobileDisplay.addClass('field-not-available');
+                        }
                     }
-                    if (!nameField || nameField.length === 0) {
+                    
+                    // Clear and ensure the manual mobile number field is editable
+                    var mobileField = visibleSection.find('#id_manual_mobile, [name="manual_mobile"]').first();
+                    if (mobileField.length === 0) {
+                        mobileField = $('#id_manual_mobile, [name="manual_mobile"]').first();
+                    }
+                    if (mobileField.length > 0) {
+                        mobileField.val(''); // Clear any existing value
+                        mobileField.attr('placeholder', 'Enter current mobile number');
+                        mobileField.prop('readonly', false); // Ensure it's editable
+                        mobileField.prop('disabled', false); // Ensure it's not disabled
+                        mobileField.removeClass('field-updated manual-entry-required');
+                    }
+                    
+                    // Update name_pensioner field
+                    var nameField = visibleSection.find('#id_name_pensioner, [name="name_pensioner"]').first();
+                    if (nameField.length === 0) {
                         nameField = $('#id_name_pensioner, [name="name_pensioner"]').first();
                     }
                     
                     if (nameField.length > 0) {
                         if (data.name_pensioner && data.name_pensioner.trim()) {
-                            console.log('Found name field:', nameField);
                             nameField.val(data.name_pensioner.trim());
                             nameField.trigger('change');
-                            nameField.trigger('input');
                             updatedFields.push('Name: ' + data.name_pensioner);
-                            console.log('Updated name field with:', data.name_pensioner);
                             nameField.addClass('field-updated');
                         } else {
-                            // Enable field for manual entry and add placeholder
                             nameField.attr('placeholder', 'Please enter pensioner name manually');
                             nameField.addClass('manual-entry-required');
                             manualEntryNeeded.push('Pensioner Name');
-                            console.log('Name not available in database - allowing manual entry');
                         }
                     }
                     
-                    // Update retirement date field - look only in visible section first, then globally
-                    var dateField = null;
-                    if (visibleSection.length > 0) {
-                        dateField = visibleSection.find('#id_date_of_retirement, [name="date_of_retirement"]').first();
-                    }
-                    if (!dateField || dateField.length === 0) {
-                        dateField = $('#id_date_of_retirement, [name="date_of_retirement"]').first();
+                    // Update type_of_pensioner field
+                    var pensionerTypeField = visibleSection.find('#id_type_of_pensioner, [name="type_of_pensioner"]').first();
+                    if (pensionerTypeField.length === 0) {
+                        pensionerTypeField = $('#id_type_of_pensioner, [name="type_of_pensioner"]').first();
                     }
                     
-                    if (dateField.length > 0) {
+                    if (pensionerTypeField.length > 0) {
+                        if (data.pensioner_type && data.pensioner_type.trim()) {
+                            pensionerTypeField.val(data.pensioner_type.trim());
+                            pensionerTypeField.trigger('change');
+                            updatedFields.push('Pensioner Type: ' + data.pensioner_type);
+                            pensionerTypeField.addClass('field-updated');
+                        } else {
+                            pensionerTypeField.addClass('manual-entry-required');
+                            manualEntryNeeded.push('Pensioner Type');
+                        }
+                    }
+                    
+                    // Update date_of_retirement field (dd-mm-yyyy format)
+                    var retirementDateField = visibleSection.find('#id_date_of_retirement, [name="date_of_retirement"]').first();
+                    if (retirementDateField.length === 0) {
+                        retirementDateField = $('#id_date_of_retirement, [name="date_of_retirement"]').first();
+                    }
+                    
+                    if (retirementDateField.length > 0) {
                         if (data.date_of_retirement && data.date_of_retirement.trim()) {
-                            console.log('Found date field:', dateField);
-                            dateField.val(data.date_of_retirement);
-                            dateField.trigger('change');
-                            dateField.trigger('input');
+                            retirementDateField.val(data.date_of_retirement);
+                            retirementDateField.trigger('change');
                             updatedFields.push('Retirement Date: ' + data.date_of_retirement);
-                            console.log('Updated date field with:', data.date_of_retirement);
-                            dateField.addClass('field-updated');
+                            retirementDateField.addClass('field-updated');
                         } else {
-                            // Enable field for manual entry and add placeholder
-                            dateField.attr('placeholder', 'YYYY-MM-DD');
-                            dateField.addClass('manual-entry-required');
+                            retirementDateField.attr('placeholder', 'DD-MM-YYYY');
+                            retirementDateField.addClass('manual-entry-required');
                             manualEntryNeeded.push('Retirement Date');
-                            console.log('Retirement date not available in database - allowing manual entry');
                         }
                     }
                     
-                    // Update mobile number if available and field exists
-                    var mobileField = null;
-                    if (visibleSection.length > 0) {
-                        mobileField = visibleSection.find('#id_mobile_number, [name="mobile_number"]').first();
-                    }
-                    if (!mobileField || mobileField.length === 0) {
-                        mobileField = $('#id_mobile_number, [name="mobile_number"]').first();
-                    }
-                    
-                    if (mobileField.length > 0) {
-                        if (data.mobile_number && data.mobile_number.trim()) {
-                            console.log('Found mobile field:', mobileField);
-                            mobileField.val(data.mobile_number);
-                            mobileField.trigger('change');
-                            mobileField.trigger('input');
-                            updatedFields.push('Mobile: ' + data.mobile_number);
-                            console.log('Updated mobile field with:', data.mobile_number);
-                            mobileField.addClass('field-updated');
-                        } else {
-                            // Enable field for manual entry and add placeholder
-                            mobileField.attr('placeholder', 'Enter mobile number');
-                            mobileField.addClass('manual-entry-required');
-                            manualEntryNeeded.push('Mobile Number');
-                            console.log('Mobile number not available in database - allowing manual entry');
-                        }
-                    }
-                    
-                    // Update pension type if available and field exists
-                    var pensionTypeField = null;
-                    if (visibleSection.length > 0) {
-                        pensionTypeField = visibleSection.find('#id_type_of_pension, [name="type_of_pension"]').first();
-                    }
-                    if (!pensionTypeField || pensionTypeField.length === 0) {
+                    // Update pension type if field exists
+                    var pensionTypeField = visibleSection.find('#id_type_of_pension, [name="type_of_pension"]').first();
+                    if (pensionTypeField.length === 0) {
                         pensionTypeField = $('#id_type_of_pension, [name="type_of_pension"]').first();
                     }
                     
                     if (pensionTypeField.length > 0) {
-                        if (data.type_of_pension && data.type_of_pension.trim()) {
-                            console.log('Found pension type field:', pensionTypeField);
-                            pensionTypeField.val(data.type_of_pension);
+                        if (data.pension_type && data.pension_type.trim()) {
+                            pensionTypeField.val(data.pension_type);
                             pensionTypeField.trigger('change');
-                            updatedFields.push('Pension Type: ' + data.type_of_pension);
-                            console.log('Updated pension type field with:', data.type_of_pension);
+                            updatedFields.push('Pension Type: ' + data.pension_type);
                             pensionTypeField.addClass('field-updated');
                         } else {
-                            // For dropdown fields, just highlight that manual selection is needed
                             pensionTypeField.addClass('manual-entry-required');
                             manualEntryNeeded.push('Pension Type');
-                            console.log('Pension type not available in database - manual selection required');
                         }
                     }
                     
-                    // Update date of death if available and field exists
-                    var deathDateField = null;
-                    if (visibleSection.length > 0) {
-                        deathDateField = visibleSection.find('#id_date_of_death, [name="date_of_death"]').first();
-                    }
-                    if (!deathDateField || deathDateField.length === 0) {
+                    // Update date_of_death if field exists
+                    var deathDateField = visibleSection.find('#id_date_of_death, [name="date_of_death"]').first();
+                    if (deathDateField.length === 0) {
                         deathDateField = $('#id_date_of_death, [name="date_of_death"]').first();
                     }
                     
                     if (deathDateField.length > 0) {
                         if (data.date_of_death && data.date_of_death.trim()) {
-                            console.log('Found death date field:', deathDateField);
                             deathDateField.val(data.date_of_death);
                             deathDateField.trigger('change');
-                            deathDateField.trigger('input');
                             updatedFields.push('Date of Death: ' + data.date_of_death);
-                            console.log('Updated death date field with:', data.date_of_death);
                             deathDateField.addClass('field-updated');
                         } else {
-                            // Enable field for manual entry and add placeholder
-                            deathDateField.attr('placeholder', 'YYYY-MM-DD');
+                            deathDateField.attr('placeholder', 'DD-MM-YYYY');
                             deathDateField.addClass('manual-entry-required');
                             manualEntryNeeded.push('Date of Death');
-                            console.log('Date of death not available in database - allowing manual entry');
                         }
                     }
                     
-                    // Show success message with information about what was updated and what needs manual entry
+                    // Show success message
                     var message = '';
                     var messageClass = '';
                     
@@ -306,29 +367,19 @@ $(document).ready(function() {
                         message = 'PPO data fetched successfully!<br>' + updatedFields.join('<br>');
                         messageClass = 'alert-success';
                     } else if (manualEntryNeeded.length > 0) {
-                        message = 'PPO found but some data is missing in database.<br><strong>Please enter manually:</strong> ' + manualEntryNeeded.join(', ');
+                        message = 'PPO found but data is incomplete.<br><strong>Please enter manually:</strong> ' + manualEntryNeeded.join(', ');
                         messageClass = 'alert-info';
                     } else {
-                        message = 'PPO found but no relevant fields found for this form section';
+                        message = 'PPO found but no relevant fields updated';
                         messageClass = 'alert-warning';
                     }
                     
                     $(statusDivId).html('<div class="alert ' + messageClass + '">' + message + '</div>');
                     
-                    // Add visual feedback to updated fields
-                    setTimeout(function() {
-                        $('.field-updated').removeClass('field-updated');
-                    }, 2000);
-                    
-                    // Keep manual entry highlighting longer
-                    setTimeout(function() {
-                        $('.manual-entry-required').removeClass('manual-entry-required');
-                    }, 10000);
-                    
-                    // Auto-hide message after 5 seconds
+                    // Auto-hide message after 8 seconds
                     setTimeout(function() {
                         $(statusDivId).fadeOut();
-                    }, 5000);
+                    }, 8000);
                     
                 } else {
                     console.error('API error:', response.error);
@@ -338,48 +389,110 @@ $(document).ready(function() {
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
-                console.error('Response text:', xhr.responseText);
-                $(statusDivId).html('<div class="alert alert-danger">Failed to fetch PPO data. Please try again. Error: ' + error + '</div>');
+                var errorMessage = 'Failed to fetch PPO data. Please try again.';
+                if (status === 'timeout') {
+                    errorMessage = 'Request timed out. Please check your connection and try again.';
+                }
+                $(statusDivId).html('<div class="alert alert-danger">' + errorMessage + '</div>');
+            },
+            complete: function() {
+                // Reset button state
+                fetchInProgress[buttonId] = false;
+                $button.prop('disabled', false).text('Fetch PPO Data');
+                
+                // Remove visual feedback after 3 seconds
+                setTimeout(function() {
+                    $('.field-updated').removeClass('field-updated');
+                }, 3000);
+                
+                // Keep manual entry highlighting longer
+                setTimeout(function() {
+                    $('.manual-entry-required').removeClass('manual-entry-required');
+                }, 12000);
             }
         });
     }
     
-    // Button to status div mapping
-    var buttonToStatusMap = {
-        'fetch-ppo-btn': '#ppo-status',
-        'fetch-ppo-btn-fp': '#ppo-status-fp',
-        'fetch-ppo-btn-efp': '#ppo-status-efp',
-        'fetch-ppo-btn-lta': '#ppo-status-lta',
-        'fetch-ppo-btn-pc': '#ppo-status-pc',
-        'fetch-ppo-btn-fma': '#ppo-status-fma',
-        'fetch-ppo-btn-di': '#ppo-status-di',
-        'fetch-ppo-btn-fpcs': '#ppo-status-fpcs'
-    };
+    // Enhanced Employee data fetcher for Superannuation
+    function fetchEmployeeData(buttonElement) {
+        var $button = $(buttonElement);
+        var buttonId = $button.attr('id');
+        var statusDivId = $button.data('status-div');
+        
+        // Prevent multiple simultaneous requests
+        if (fetchInProgress[buttonId]) {
+            console.log('Fetch already in progress for', buttonId);
+            return;
+        }
+        
+        var employeeId = $('#id_retiring_employee').val();
+        console.log('Fetching employee data for ID:', employeeId);
+        
+        if (!employeeId) {
+            $(statusDivId).html('<div class="alert alert-warning">Please select a retiring employee first</div>');
+            return;
+        }
+        
+        // Set fetch in progress and update UI
+        fetchInProgress[buttonId] = true;
+        $button.prop('disabled', true).text('Fetching...');
+        $(statusDivId).html('<div class="alert alert-info">Fetching employee data...</div>');
+        
+        $.ajax({
+            url: '{% url "get_retiring_employee_data" %}',
+            type: 'GET',
+            data: { employee_id: employeeId },
+            timeout: 10000,
+            success: function(response) {
+                console.log('Employee API response:', response);
+                
+                if (!response.error && response.retirement_date) {
+                    $('#id_date_of_retirement').val(response.retirement_date);
+                    $('#id_date_of_retirement').trigger('change');
+                    $('#id_date_of_retirement').addClass('field-updated');
+                    
+                    $(statusDivId).html('<div class="alert alert-success">Employee data fetched successfully!<br>Retirement Date: ' + response.retirement_date + '</div>');
+                    
+                    // Auto-hide message after 5 seconds
+                    setTimeout(function() {
+                        $(statusDivId).fadeOut();
+                    }, 5000);
+                } else {
+                    var errorMsg = response.error || 'No retirement date found for this employee';
+                    $(statusDivId).html('<div class="alert alert-danger">' + errorMsg + '</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                var errorMessage = 'Failed to fetch employee data. Please try again.';
+                if (status === 'timeout') {
+                    errorMessage = 'Request timed out. Please check your connection and try again.';
+                }
+                $(statusDivId).html('<div class="alert alert-danger">' + errorMessage + '</div>');
+            },
+            complete: function() {
+                // Reset button state
+                fetchInProgress[buttonId] = false;
+                $button.prop('disabled', false).text('Fetch Employee Data');
+                
+                // Remove visual feedback after 3 seconds
+                setTimeout(function() {
+                    $('.field-updated').removeClass('field-updated');
+                }, 3000);
+            }
+        });
+    }
     
-    // Bind all PPO fetch buttons with improved error handling
-    $('#fetch-ppo-btn, #fetch-ppo-btn-fp, #fetch-ppo-btn-efp, #fetch-ppo-btn-lta, #fetch-ppo-btn-pc, #fetch-ppo-btn-fma, #fetch-ppo-btn-di, #fetch-ppo-btn-fpcs').click(function(e) {
+    // Bind all PPO fetch buttons
+    $(document).on('click', '[id^="fetch-ppo-btn"]', function(e) {
         e.preventDefault();
-        
-        var buttonId = $(this).attr('id');
-        var statusDiv = buttonToStatusMap[buttonId] || '#ppo-status';
-        
-        console.log('PPO fetch button clicked:', buttonId, 'Status div:', statusDiv);
-        
-        // Find the PPO input field in the current visible section
-        var visibleSection = $(this).closest('.specific-fields');
-        var ppoInput = visibleSection.find('#id_ppo_number, [name="ppo_number"]').first();
-        
-        if (ppoInput.length === 0) {
-            ppoInput = $('#id_ppo_number, [name="ppo_number"]').first();
-        }
-        
-        if (ppoInput.length > 0) {
-            console.log('Found PPO input field:', ppoInput);
-            fetchPPOData('#' + ppoInput.attr('id'), statusDiv);
-        } else {
-            console.error('PPO input field not found');
-            $(statusDiv).html('<div class="alert alert-danger">PPO input field not found</div>');
-        }
+        fetchPPOData(this);
+    });
+    
+    // Bind employee fetch button
+    $(document).on('click', '#fetch-employee-btn', function(e) {
+        e.preventDefault();
+        fetchEmployeeData(this);
     });
     
     // For Superannuation: Fetch retiring employees on month/year change
@@ -387,36 +500,57 @@ $(document).ready(function() {
         var month = $('#id_retirement_month').val();
         var year = $('#id_retirement_year').val();
         
+        console.log('Month/Year changed:', month, year);
+        
         if (month && year) {
-            $.get('/get-retiring-employees-by-month-year/', {month: month, year: year})
-                .done(function(data) {
+            // Clear current employee selection
+            $('#id_retiring_employee').empty().append('<option value="">Loading employees...</option>');
+            $('#id_date_of_retirement').val('');
+            
+            $.ajax({
+                url: '{% url "get_retiring_employees_by_month_year" %}',
+                type: 'GET',
+                data: { month: month, year: year },
+                success: function(data) {
+                    console.log('Employees response:', data);
                     $('#id_retiring_employee').empty();
                     $('#id_retiring_employee').append('<option value="">Select Employee</option>');
-                    $.each(data.employees, function(index, emp) {
-                        $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
-                    });
-                })
-                .fail(function() {
-                    console.warn('Failed to load retiring employees');
-                });
+                    
+                    if (data.employees && data.employees.length > 0) {
+                        $.each(data.employees, function(index, emp) {
+                            $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
+                        });
+                        $('#employee-status').html('<div class="alert alert-success">Found ' + data.employees.length + ' retiring employees for ' + month + '/' + year + '</div>');
+                    } else {
+                        $('#employee-status').html('<div class="alert alert-info">No retiring employees found for ' + month + '/' + year + '</div>');
+                    }
+                    
+                    // Auto-hide message after 3 seconds
+                    setTimeout(function() {
+                        $('#employee-status').fadeOut();
+                    }, 3000);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Failed to load retiring employees:', error);
+                    $('#id_retiring_employee').empty().append('<option value="">Select Employee</option>');
+                    $('#employee-status').html('<div class="alert alert-danger">Failed to load retiring employees. Please try again.</div>');
+                }
+            });
+        } else {
+            $('#id_retiring_employee').empty().append('<option value="">Select Employee</option>');
+            $('#id_date_of_retirement').val('');
         }
     });
     
-    // Fetch retiring employee data (date)
+    // Auto-fetch retirement date when employee is selected
     $('#id_retiring_employee').change(function() {
         var employeeId = $(this).val();
         
         if (employeeId) {
-            $.get('/get-retiring-employee-data/', {employee_id: employeeId})
-                .done(function(data) {
-                    if (!data.error && data.retirement_date) {
-                        $('#id_date_of_retirement').val(data.retirement_date);
-                        $('#id_date_of_retirement').trigger('change');
-                    }
-                })
-                .fail(function() {
-                    console.warn('Failed to load retiring employee data');
-                });
+            // Auto-fetch the employee data
+            $('#fetch-employee-btn').trigger('click');
+        } else {
+            $('#id_date_of_retirement').val('');
         }
     });
     
@@ -432,6 +566,14 @@ $('<style>')
             background-color: #d4edda !important;
             border-color: #28a745 !important;
             transition: all 0.3s ease;
+            animation: pulse-green 0.6s ease-in-out;
+        }
+        
+        .field-not-available {
+            background-color: #f8f9fa !important;
+            border-color: #6c757d !important;
+            color: #6c757d !important;
+            font-style: italic;
         }
         
         .manual-entry-required {
@@ -443,10 +585,18 @@ $('<style>')
         .manual-entry-required::placeholder {
             color: #856404 !important;
             font-style: italic;
+            font-weight: 500;
+        }
+        
+        @keyframes pulse-green {
+            0% { background-color: #d4edda; }
+            50% { background-color: #a7d4aa; }
+            100% { background-color: #d4edda; }
         }
         
         .alert {
             margin-top: 10px;
+            border-radius: 6px;
         }
         
         .alert strong {
@@ -457,6 +607,40 @@ $('<style>')
             border-left: 3px solid #007bff;
             padding-left: 15px;
             margin-top: 20px;
+            background-color: #f8f9fa;
+            border-radius: 0 6px 6px 0;
+            padding: 15px;
+        }
+        
+        .btn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .ppo-fetch-status, #employee-status {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        #registered_mobile_display, 
+        [id^="registered_mobile_display"] {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+        
+        /* Ensure mobile number fields are always editable */
+        #id_manual_mobile,
+        [name="manual_mobile"] {
+            background-color: #ffffff !important;
+            cursor: text !important;
+        }
+        
+        #id_manual_mobile:focus,
+        [name="manual_mobile"]:focus {
+            background-color: #ffffff !important;
+            border-color: #80bdff !important;
+            outline: 0 !important;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
         }
     `)
     .appendTo('head');
