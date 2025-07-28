@@ -22,4 +22,6 @@ urlpatterns = [
     # Legacy endpoints (for backward compatibility)
     path('get-ppo-data/', views.get_ppo_data, name='get_ppo_data_legacy'),
     path('get-retiring-employee-data/', views.get_retiring_employee_data, name='get_retiring_employee_data_legacy'),
+    path('export/<str:format>/', views.export_cases, name='export_cases'),
+
 ]

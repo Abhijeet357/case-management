@@ -18,44 +18,77 @@ from .forms import CaseRegistrationForm, CaseMovementForm, UserRegistrationForm,
 
 @login_required
 def dashboard(request):
-    """Main dashboard view"""
     user_profile = get_object_or_404(UserProfile, user=request.user)
-    
-    # Get cases for current user
-    my_cases = Case.objects.filter(current_holder=user_profile, is_completed=False)
-    
-    # Get summary statistics
-    total_cases = Case.objects.count()
-    pending_cases = Case.objects.filter(is_completed=False).count()
-    completed_cases = Case.objects.filter(is_completed=True).count()
-    overdue_cases = Case.objects.filter(
-        is_completed=False,
-        expected_completion__lt=timezone.now()
-    ).count()
-    
-    # Get cases by priority
-    high_priority = Case.objects.filter(priority='High', is_completed=False).count()
-    medium_priority = Case.objects.filter(priority='Medium', is_completed=False).count()
-    low_priority = Case.objects.filter(priority='Low', is_completed=False).count()
-    
-    # Get recent cases
-    recent_cases = Case.objects.all()[:10]
-    
-    # Get cases by stage (for admin users)
+    ALLOWED_ROLES_FOR_OVERALL = ['AO', 'Jt.CCA', 'CCA', 'Pr.CCA', 'ADMIN']
+    show_overall = user_profile.role in ALLOWED_ROLES_FOR_OVERALL
+
+    # Filtering logic
+    cases = Case.objects.all()
+    filter_period = request.GET.get('period', '')
+    filter_case_type = request.GET.get('case_type', '')
+    filter_priority = request.GET.get('priority', '')
+    filter_status = request.GET.get('status', '')
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+
+    now = timezone.now()
+
+    # Period filter
+    if filter_period == 'today':
+        cases = cases.filter(registration_date__date=now.date())
+    elif filter_period == 'this_week':
+        week_start = now - timedelta(days=now.weekday())
+        cases = cases.filter(registration_date__date__gte=week_start.date())
+    elif filter_period == 'this_month':
+        cases = cases.filter(registration_date__month=now.month, registration_date__year=now.year)
+    elif filter_period == 'this_year':
+        cases = cases.filter(registration_date__year=now.year)
+    elif filter_period == 'custom' and start_date and end_date:
+        cases = cases.filter(registration_date__date__gte=start_date, registration_date__date__lte=end_date)
+
+    # Case type filter
+    if filter_case_type:
+        cases = cases.filter(case_type_id=filter_case_type)
+    # Priority filter
+    if filter_priority:
+        cases = cases.filter(priority=filter_priority)
+    # Status filter
+    if filter_status == 'pending':
+        cases = cases.filter(is_completed=False)
+    elif filter_status == 'completed':
+        cases = cases.filter(is_completed=True)
+    elif filter_status == 'overdue':
+        cases = cases.filter(is_completed=False, expected_completion__lt=now)
+
+    filtered_cases = cases.order_by('-registration_date')[:100]  # Limit for performance
+
+    # Stats (recalculate for filtered set)
+    total_cases = cases.count()
+    pending_cases = cases.filter(is_completed=False).count()
+    completed_cases = cases.filter(is_completed=True).count()
+    overdue_cases = cases.filter(is_completed=False, expected_completion__lt=now).count()
+    high_priority = cases.filter(priority='High', is_completed=False).count()
+    medium_priority = cases.filter(priority='Medium', is_completed=False).count()
+    low_priority = cases.filter(priority='Low', is_completed=False).count()
+    recent_cases = cases.order_by('-registration_date')[:10]
     stage_stats = {}
-    if user_profile.role == 'ADMIN':
-        for stage in ['DH', 'AAO', 'AO', 'Jt.CCA', 'CCA', 'Pr.CCA']:
-            stage_stats[stage] = Case.objects.filter(
-                current_holder__role=stage,
-                is_completed=False
-            ).count()
-    
-    # Add unclaimed Death Intimation for monitoring (fixed typo)
-    unclaimed_death_cases = Case.objects.filter(case_type__name='Death Intimation', family_pension_claim__claim_status='pending')
-    
+    for stage in ['DH', 'AAO', 'AO', 'Jt.CCA', 'CCA', 'Pr.CCA']:
+        stage_stats[stage] = cases.filter(current_holder__role=stage, is_completed=False).count()
+
+    my_cases = Case.objects.filter(current_holder=user_profile, is_completed=False)
+
     context = {
         'user_profile': user_profile,
-        'my_cases': my_cases,
+        'show_overall': show_overall,
+        'case_types': CaseType.objects.all(),
+        'filtered_cases': filtered_cases,
+        'filter_period': filter_period,
+        'filter_case_type': filter_case_type,
+        'filter_priority': filter_priority,
+        'filter_status': filter_status,
+        'start_date': start_date,
+        'end_date': end_date,
+        'now': now,
         'total_cases': total_cases,
         'pending_cases': pending_cases,
         'completed_cases': completed_cases,
@@ -65,9 +98,8 @@ def dashboard(request):
         'low_priority': low_priority,
         'recent_cases': recent_cases,
         'stage_stats': stage_stats,
-        'unclaimed_death_cases': unclaimed_death_cases,
+        'my_cases': my_cases,
     }
-    
     return render(request, 'cases/dashboard.html', context)
 
 @login_required
@@ -744,3 +776,24 @@ def get_available_holders(request):
             'success': False,
             'error': f'An error occurred: {str(e)}'
         })
+from django.http import HttpResponse
+import csv
+
+def export_cases(request, format):
+    # For demonstration, export all cases as CSV
+    if format == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="cases.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Case ID', 'Title', 'Type', 'Priority', 'Status'])
+        for case in Case.objects.all():
+            writer.writerow([
+                case.case_id,
+                case.case_title,
+                case.case_type.name if case.case_type else '',
+                case.priority,
+                'Completed' if case.is_completed else 'Pending'
+            ])
+        return response
+    # You can add Excel/PDF export logic here later
+    return HttpResponse("Export format not supported.", status=400)
