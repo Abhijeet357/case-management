@@ -10,6 +10,19 @@
 <form method="post" id="case-form">
     {% csrf_token %}
     
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger">
+        <strong>Please correct the following errors:</strong>
+        {{ form.non_field_errors }}
+    </div>
+{% endif %}
+
+{% if form.errors %}
+    <div class="alert alert-warning">
+        <strong>Please fill in all required fields for the selected case type.</strong>
+    </div>
+{% endif %}
+
     <!-- Common fields -->
     <div class="row">
         <div class="col-md-6">{{ form.case_type|as_crispy_field }}</div>
@@ -177,16 +190,51 @@ $(document).ready(function() {
     // Track fetch button states to prevent multiple requests
     let fetchInProgress = {};
     
-    // Show/hide fields based on case type
-    $('#id_case_type').change(function() {
-        var selectedText = $('option:selected', this).text().trim().toLowerCase().replace(/ \(.+\)/g, '').replace(/ /g, '-').replace(/-+/g, '-');
-        console.log('Selected case type ID:', selectedText);
+    // Function to show appropriate fields based on case type
+    function showFieldsForCaseType(caseTypeId, caseTypeText) {
+        console.log('Showing fields for case type:', caseTypeText);
         $('.specific-fields').hide();
-        $('#' + selectedText + '-fields').show();
+        
+        if (caseTypeText && caseTypeText !== '---------') {
+            // Normalize the case type text to match div IDs
+            var normalizedText = caseTypeText.trim().toLowerCase()
+                .replace(/ \(.+\)/g, '')  // Remove parenthetical content
+                .replace(/ /g, '-')       // Replace spaces with hyphens
+                .replace(/-+/g, '-');     // Replace multiple hyphens with single hyphen
+            
+            console.log('Normalized case type:', normalizedText);
+            $('#' + normalizedText + '-fields').show();
+        }
+    }
+    
+    // CRITICAL: Check if form has errors and preserve field visibility
+    var hasFormErrors = {{ has_errors|yesno:"true,false" }};
+    var selectedCaseTypeId = '{{ selected_case_type|default:"" }}';
+    
+    console.log('Has form errors:', hasFormErrors);
+    console.log('Selected case type ID:', selectedCaseTypeId);
+    
+    // If there are form errors or a pre-selected case type, show appropriate fields
+    if (hasFormErrors || selectedCaseTypeId) {
+        var currentCaseTypeId = $('#id_case_type').val() || selectedCaseTypeId;
+        if (currentCaseTypeId) {
+            var selectedText = $('#id_case_type option[value="' + currentCaseTypeId + '"]').text();
+            console.log('Restoring fields for case type:', selectedText);
+            showFieldsForCaseType(currentCaseTypeId, selectedText);
+        }
+    }
+    
+    // Show/hide fields based on case type change
+    $('#id_case_type').change(function() {
+        var selectedId = $(this).val();
+        var selectedText = $('option:selected', this).text().trim();
+        console.log('Case type changed to:', selectedText, 'ID:', selectedId);
+        
+        showFieldsForCaseType(selectedId, selectedText);
         
         // Clear any previous fetch status
         $('.ppo-fetch-status').empty();
-        $('[id^="registered_mobile_display"]').val(''); // Clear registered mobile displays
+        $('[id^="registered_mobile_display"]').val('');
         fetchInProgress = {};
     });
     
@@ -520,6 +568,13 @@ $(document).ready(function() {
                         $.each(data.employees, function(index, emp) {
                             $('#id_retiring_employee').append('<option value="' + emp.id + '">' + emp.name + '</option>');
                         });
+                        
+                        // PRESERVE SELECTED EMPLOYEE IF FORM HAS ERRORS
+                        var selectedEmployee = '{{ form.retiring_employee.value|default:"" }}';
+                        if (selectedEmployee) {
+                            $('#id_retiring_employee').val(selectedEmployee);
+                        }
+                        
                         $('#employee-status').html('<div class="alert alert-success">Found ' + data.employees.length + ' retiring employees for ' + month + '/' + year + '</div>');
                     } else {
                         $('#employee-status').html('<div class="alert alert-info">No retiring employees found for ' + month + '/' + year + '</div>');
@@ -554,11 +609,28 @@ $(document).ready(function() {
         }
     });
     
-    // Trigger initial change
-    $('#id_case_type').trigger('change');
+    // RESTORE SUPERANNUATION DATA IF FORM HAS ERRORS
+    if (hasFormErrors) {
+        var retirementMonth = '{{ form.retirement_month.value|default:"" }}';
+        var retirementYear = '{{ form.retirement_year.value|default:"" }}';
+        
+        if (retirementMonth && retirementYear) {
+            console.log('Restoring superannuation data:', retirementMonth, retirementYear);
+            setTimeout(function() {
+                $('#id_retirement_month').val(retirementMonth);
+                $('#id_retirement_year').val(retirementYear);
+                $('#id_retirement_month, #id_retirement_year').trigger('change');
+            }, 500);
+        }
+    }
+    
+    // Trigger initial change if case type is already selected
+    if ($('#id_case_type').val()) {
+        $('#id_case_type').trigger('change');
+    }
 });
 
-// Add CSS for visual feedback
+    // Add CSS for visual feedback
 $('<style>')
     .prop('type', 'text/css')
     .html(`
@@ -642,9 +714,19 @@ $('<style>')
             outline: 0 !important;
             box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
         }
+        
+        /* CRITICAL: Ensure error fields are visible */
+        .has-error, .errorlist {
+            color: #dc3545 !important;
+            font-weight: bold;
+        }
+        
+        .form-control.is-invalid {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
     `)
     .appendTo('head');
-
 </script>
 
 {% endblock %}

@@ -1,0 +1,613 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Register Case - Enhanced{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dynamic-field-group {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+        border-left: 4px solid #007bff;
+    }
+    .field-group-title {
+        font-weight: bold;
+        color: #007bff;
+        margin-bottom: 10px;
+    }
+    .auto-populated {
+        background-color: #e8f5e8;
+        border-color: #28a745;
+    }
+    .loading-spinner {
+        display: none;
+    }
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        border: 1px solid rgba(0, 0, 0, 0.125);
+        margin-bottom: 1rem;
+    }
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+        padding: 0.75rem 1.25rem;
+    }
+    .btn-lg {
+        font-size: 1.25rem;
+        padding: 0.5rem 1rem;
+    }
+    .alert {
+        margin-bottom: 1rem;
+    }
+    .is-invalid {
+        border-color: #dc3545;
+    }
+    .form-check {
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h2>Register New Case - Enhanced</h2>
+            <p class="text-muted">Register a case with dynamic fields and milestone tracking</p>
+        </div>
+    </div>
+
+    <!-- Alert container for dynamic messages -->
+    <div id="alertContainer"></div>
+
+    <form method="post" enctype="multipart/form-data" id="caseRegistrationForm">
+        {% csrf_token %}
+
+        <!-- Basic Case Information -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Basic Case Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="case_type">Case Type *</label>
+                            <select name="case_type" id="case_type" class="form-control" required>
+                                <option value="">Select Case Type</option>
+                                {% for case_type in case_types %}
+                                <option value="{{ case_type.id }}">{{ case_type.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="sub_category">Sub Category</label>
+                            <select name="sub_category" id="sub_category" class="form-control">
+                                <option value="">Select Sub Category</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="case_title">Case Title *</label>
+                    <input type="text" name="case_title" id="case_title" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="case_description">Case Description *</label>
+                    <textarea name="case_description" id="case_description" class="form-control" rows="3" required></textarea>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="applicant_name">Applicant Name *</label>
+                            <input type="text" name="applicant_name" id="applicant_name" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="priority">Priority</label>
+                            <select name="priority" id="priority" class="form-control">
+                                <option value="Low">Low</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PPO Master Integration -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">PPO Master Integration</h5>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="ppo_number">PPO Number</label>
+                    <div class="input-group">
+                        <input type="text" name="ppo_number" id="ppo_number" class="form-control" 
+                               placeholder="Enter PPO number to auto-populate fields">
+                        <div class="input-group-append">
+                            <button type="button" id="fetchPPOData" class="btn btn-outline-secondary">
+                                <span class="loading-spinner">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </span>
+                                <span class="fetch-text">Fetch Data</span>
+                            </button>
+                        </div>
+                    </div>
+                    <small class="form-text text-muted">
+                        Enter PPO number to automatically populate related fields
+                    </small>
+                </div>
+
+                <!-- PPO Data Display Section -->
+                <div id="ppoDataSection" style="display: none;">
+                    <hr>
+                    <h6>PPO Details</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="ppo_pensioner_name">Pensioner Name</label>
+                                <input type="text" id="ppo_pensioner_name" class="form-control" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="ppo_pensioner_type">Pensioner Type</label>
+                                <input type="text" id="ppo_pensioner_type" class="form-control" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="ppo_retirement_date">Date of Retirement</label>
+                                <input type="text" id="ppo_retirement_date" class="form-control" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="ppo_mobile">Mobile Number</label>
+                                <input type="text" id="ppo_mobile" class="form-control" readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Fields Container -->
+        <div id="dynamicFieldsContainer" style="display: none;">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Case Specific Information</h5>
+                </div>
+                <div class="card-body" id="dynamicFieldsContent">
+                    <!-- Dynamic fields will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="card">
+            <div class="card-body text-center">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Register Case
+                </button>
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-lg ml-2">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Get CSRF token from cookie
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+
+    // Set up CSRF token for AJAX requests
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+            if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            }
+        }
+    });
+
+    // Load dynamic fields when case type changes
+    $('#case_type').change(function() {
+        const caseTypeId = $(this).val();
+        if (caseTypeId) {
+            loadDynamicFields(caseTypeId);
+            loadSubCategories(caseTypeId);
+        } else {
+            $('#dynamicFieldsContainer').hide();
+            $('#sub_category').html('<option value="">Select Sub Category</option>');
+        }
+    });
+
+    // Fetch PPO data button click
+    $('#fetchPPOData').click(function() {
+        const ppoNumber = $('#ppo_number').val().trim();
+        if (!ppoNumber) {
+            showErrorMessage('Please enter PPO number');
+            return;
+        }
+        fetchPPOData(ppoNumber);
+    });
+
+    // Auto-fetch PPO data when PPO number field loses focus
+    $('#ppo_number').blur(function() {
+        const ppoNumber = $(this).val().trim();
+        if (ppoNumber && ppoNumber.length >= 6) {
+            fetchPPOData(ppoNumber);
+        }
+    });
+
+    // Enter key in PPO number field
+    $('#ppo_number').keypress(function(e) {
+        if (e.which === 13) { // Enter key
+            e.preventDefault();
+            const ppoNumber = $(this).val().trim();
+            if (ppoNumber) {
+                fetchPPOData(ppoNumber);
+            }
+        }
+    });
+
+    function loadSubCategories(caseTypeId) {
+        $.ajax({
+            url: '{% url "get_sub_categories" %}',
+            method: 'GET',
+            data: { case_type_id: caseTypeId },
+            success: function(response) {
+                updateSubCategories(response.sub_categories);
+            },
+            error: function(xhr, status, error) {
+                console.log('Error loading sub-categories:', error);
+                showErrorMessage('Error loading sub-categories');
+            }
+        });
+    }
+
+    function loadDynamicFields(caseTypeId) {
+        // Show dynamic fields container with placeholder
+        $('#dynamicFieldsContainer').show();
+        $('#dynamicFieldsContent').html(`
+            <div class="text-center">
+                <p class="text-muted">
+                    <i class="fas fa-info-circle"></i> 
+                    Dynamic fields specific to ${$('#case_type option:selected').text()} will appear here.
+                </p>
+            </div>
+        `);
+        
+        // Try to load dynamic fields if endpoint exists
+        $.ajax({
+            url: `/api/case-type/${caseTypeId}/fields/`,
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.fields.length > 0) {
+                    renderDynamicFields(response.fields);
+                }
+            },
+            error: function() {
+                // Endpoint might not be implemented yet, just show placeholder
+                console.log('Dynamic fields endpoint not available');
+            }
+        });
+    }
+
+    function renderDynamicFields(fields) {
+        const container = $('#dynamicFieldsContent');
+        container.empty();
+
+        // Group fields by field_group
+        const groupedFields = {};
+        fields.forEach(field => {
+            const group = field.group || 'General';
+            if (!groupedFields[group]) {
+                groupedFields[group] = [];
+            }
+            groupedFields[group].push(field);
+        });
+
+        // Render each group
+        Object.keys(groupedFields).forEach(groupName => {
+            const groupDiv = $('<div class="dynamic-field-group"></div>');
+            groupDiv.append(`<div class="field-group-title">${groupName}</div>`);
+
+            groupedFields[groupName].forEach(field => {
+                const fieldHtml = renderField(field);
+                groupDiv.append(fieldHtml);
+            });
+
+            container.append(groupDiv);
+        });
+    }
+
+    function renderField(field) {
+        const fieldName = `dynamic_${field.name}`;
+        const required = field.required ? 'required' : '';
+        const requiredMark = field.required ? ' *' : '';
+
+        let fieldHtml = `
+            <div class="form-group">
+                <label for="${fieldName}">${field.label}${requiredMark}</label>
+        `;
+
+        switch (field.type) {
+            case 'text':
+                fieldHtml += `<input type="text" name="${fieldName}" id="${fieldName}" class="form-control" ${required}>`;
+                break;
+            case 'textarea':
+                fieldHtml += `<textarea name="${fieldName}" id="${fieldName}" class="form-control" rows="3" ${required}></textarea>`;
+                break;
+            case 'number':
+                fieldHtml += `<input type="number" name="${fieldName}" id="${fieldName}" class="form-control" ${required}>`;
+                break;
+            case 'date':
+                fieldHtml += `<input type="date" name="${fieldName}" id="${fieldName}" class="form-control" ${required}>`;
+                break;
+            case 'select':
+                fieldHtml += `<select name="${fieldName}" id="${fieldName}" class="form-control" ${required}>`;
+                fieldHtml += '<option value="">Select an option</option>';
+                if (field.choices) {
+                    field.choices.forEach(choice => {
+                        fieldHtml += `<option value="${choice}">${choice}</option>`;
+                    });
+                }
+                fieldHtml += '</select>';
+                break;
+            case 'radio':
+                if (field.choices) {
+                    field.choices.forEach((choice, index) => {
+                        fieldHtml += `
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="${fieldName}" 
+                                       id="${fieldName}_${index}" value="${choice}" ${required}>
+                                <label class="form-check-label" for="${fieldName}_${index}">
+                                    ${choice}
+                                </label>
+                            </div>
+                        `;
+                    });
+                }
+                break;
+            case 'checkbox':
+                fieldHtml += `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="${fieldName}" 
+                               id="${fieldName}" value="true">
+                        <label class="form-check-label" for="${fieldName}">
+                            ${field.label}
+                        </label>
+                    </div>
+                `;
+                break;
+            case 'file':
+                fieldHtml += `<input type="file" name="${fieldName}" id="${fieldName}" class="form-control-file" ${required}>`;
+                break;
+            default:
+                fieldHtml += `<input type="text" name="${fieldName}" id="${fieldName}" class="form-control" ${required}>`;
+        }
+
+        if (field.help_text) {
+            fieldHtml += `<small class="form-text text-muted">${field.help_text}</small>`;
+        }
+
+        fieldHtml += '</div>';
+        return fieldHtml;
+    }
+
+    function updateSubCategories(subCategories) {
+        const select = $('#sub_category');
+        select.empty();
+        select.append('<option value="">Select Sub Category</option>');
+
+        if (subCategories && subCategories.length > 0) {
+            subCategories.forEach(category => {
+                select.append(`<option value="${category}">${category}</option>`);
+            });
+        }
+    }
+
+    function fetchPPOData(ppoNumber) {
+        const button = $('#fetchPPOData');
+        const spinner = button.find('.loading-spinner');
+        const text = button.find('.fetch-text');
+
+        // Show loading state
+        spinner.show();
+        text.text('Loading...');
+        button.prop('disabled', true);
+
+        // Clear previous PPO data
+        $('#ppoDataSection').hide();
+        clearAutoPopulatedFields();
+
+        $.ajax({
+            url: '{% url "get_ppo_data" %}',
+            method: 'GET',
+            data: { ppo_number: ppoNumber },
+            success: function(response) {
+                console.log('PPO Response:', response); // Debug log
+
+                if (response.success && response.data) {
+                    populateFieldsFromPPO(response.data);
+                    displayPPOData(response.data);
+                    showSuccessMessage('PPO data loaded successfully!');
+                } else {
+                    showErrorMessage(response.error || 'PPO not found');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('AJAX Error:', xhr.responseText); // Debug log
+                
+                let errorMessage = 'Error fetching PPO data';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                } else if (xhr.status === 404) {
+                    errorMessage = 'PPO number not found';
+                } else if (xhr.status === 500) {
+                    errorMessage = 'Server error while fetching PPO data';
+                }
+                
+                showErrorMessage(errorMessage);
+            },
+            complete: function() {
+                // Reset button state
+                spinner.hide();
+                text.text('Fetch Data');
+                button.prop('disabled', false);
+            }
+        });
+    }
+
+    function displayPPOData(data) {
+        // Show PPO data in the dedicated section
+        $('#ppo_pensioner_name').val(data.name_pensioner || '');
+        $('#ppo_pensioner_type').val(data.pensioner_type || '');
+        $('#ppo_retirement_date').val(data.date_of_retirement || '');
+        $('#ppo_mobile').val(data.mobile_number || '');
+        
+        $('#ppoDataSection').show();
+    }
+
+    function populateFieldsFromPPO(data) {
+        // Auto-populate basic fields
+        if (data.name_pensioner) {
+            $('#applicant_name').val(data.name_pensioner).addClass('auto-populated');
+        }
+
+        // Auto-populate case title if available
+        if (data.name_pensioner && $('#case_type option:selected').text()) {
+            const caseTitle = `${$('#case_type option:selected').text()} - ${data.name_pensioner}`;
+            $('#case_title').val(caseTitle).addClass('auto-populated');
+        }
+
+        // Auto-populate dynamic fields based on data source mapping
+        const fieldMappings = {
+            'pensioner_name': data.name_pensioner,
+            'pensioner_type': data.pensioner_type,
+            'retirement_date': data.date_of_retirement,
+            'mobile_number': data.mobile_number,
+            'pension_type': data.pension_type,
+            'date_of_death': data.date_of_death
+        };
+
+        Object.keys(fieldMappings).forEach(key => {
+            const field = $(`#dynamic_${key}`);
+            if (field.length && fieldMappings[key]) {
+                field.val(fieldMappings[key]).addClass('auto-populated');
+            }
+        });
+    }
+
+    function clearAutoPopulatedFields() {
+        $('.auto-populated').removeClass('auto-populated');
+    }
+
+    function showSuccessMessage(message) {
+        const alert = $(`
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle"></i> ${message}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        `);
+        
+        $('#alertContainer').html(alert);
+        
+        setTimeout(() => {
+            alert.fadeOut();
+        }, 4000);
+    }
+
+    function showErrorMessage(message) {
+        const alert = $(`
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle"></i> ${message}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        `);
+        
+        $('#alertContainer').html(alert);
+        
+        setTimeout(() => {
+            alert.fadeOut();
+        }, 6000);
+    }
+
+    // Form validation
+    $('#caseRegistrationForm').submit(function(e) {
+        let isValid = true;
+        
+        // Clear previous validation states
+        $('.is-invalid').removeClass('is-invalid');
+        
+        // Check required fields
+        $(this).find('[required]').each(function() {
+            if (!$(this).val().trim()) {
+                $(this).addClass('is-invalid');
+                isValid = false;
+            } else {
+                $(this).removeClass('is-invalid');
+            }
+        });
+
+        if (!isValid) {
+            e.preventDefault();
+            showErrorMessage('Please fill in all required fields.');
+            
+            // Scroll to first invalid field
+            const firstInvalid = $('.is-invalid').first();
+            if (firstInvalid.length) {
+                $('html, body').animate({
+                    scrollTop: firstInvalid.offset().top - 100
+                }, 500);
+            }
+            
+            return false;
+        }
+
+        return true;
+    });
+
+    // Remove validation error on field focus
+    $(document).on('focus', '.is-invalid', function() {
+        $(this).removeClass('is-invalid');
+    });
+});
+</script>
+{% endblock %}

@@ -11,9 +11,10 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 import json
 import csv
+from django.db import transaction
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
-from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee
+from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee, DynamicFormField,CaseMilestone,CaseMilestoneProgress, CaseFieldData
 from .forms import CaseRegistrationForm, CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
 
 @login_required
@@ -191,7 +192,6 @@ def case_detail(request, case_id):
     
     return render(request, 'cases/case_detail.html', context)
 
-@login_required
 def register_case(request):
     """Register a new case"""
     user_profile = get_object_or_404(UserProfile, user=request.user)
@@ -247,10 +247,22 @@ def register_case(request):
             
             messages.success(request, f'Case {case.case_id} registered successfully!')
             return redirect('case_detail', case_id=case.case_id)
+        else:
+            # ADDED: Better error handling for debugging
+            print("Form validation errors:", form.errors)
+            print("Form non-field errors:", form.non_field_errors)
+            messages.error(request, 'Please correct the errors below and try again.')
     else:
         form = CaseRegistrationForm()
     
-    return render(request, 'cases/register_case.html', {'form': form})
+    # ADDED: Pass additional context
+    context = {
+        'form': form,
+        'has_errors': bool(form.errors) if hasattr(form, 'errors') else False,
+        'selected_case_type': form.data.get('case_type') if form.data else None,
+    }
+    
+    return render(request, 'cases/register_case.html', context)
 
 @login_required
 def move_case(request, case_id):
@@ -797,3 +809,352 @@ def export_cases(request, format):
         return response
     # You can add Excel/PDF export logic here later
     return HttpResponse("Export format not supported.", status=400)
+@login_required
+def enhanced_dashboard(request):
+    """Enhanced dashboard with milestone tracking and dynamic fields"""
+    try:
+        user_profile = request.user.userprofile
+    except:
+        # If UserProfile doesn't exist, create one or redirect
+        messages.error(request, 'User profile not found. Please contact administrator.')
+        return redirect('dashboard')
+
+    # Get cases based on role hierarchy
+    if hasattr(user_profile, 'get_dashboard_cases'):
+        cases = user_profile.get_dashboard_cases()
+    else:
+        # Fallback if method doesn't exist
+        cases = Case.objects.filter(current_holder=user_profile)
+
+    now = timezone.now()
+
+    # Dashboard statistics
+    total_cases = cases.count()
+    pending_cases = cases.filter(is_completed=False).count()
+    completed_today = cases.filter(
+        is_completed=True,
+        actual_completion__date=now.date()
+    ).count()
+
+    # Calculate overdue cases (fallback if no milestone system)
+    overdue_count = cases.filter(
+        is_completed=False,
+        expected_completion__lt=now
+    ).count()
+
+    # Priority-wise breakdown
+    priority_stats = cases.values('priority').annotate(count=Count('id'))
+
+    # Milestone statistics (with error handling)
+    milestone_stats = []
+    overdue_milestones = []
+    
+    try:
+        # Try to get milestone data if the model exists
+        milestone_stats = CaseMilestoneProgress.objects.filter(
+            case__in=cases
+        ).values('status').annotate(count=Count('id'))
+
+        # Cases requiring attention (overdue milestones)
+        overdue_milestones = CaseMilestoneProgress.objects.filter(
+            case__in=cases,
+            status__in=['pending', 'in_progress'],
+            expected_completion_date__lt=now
+        ).select_related('case', 'milestone')[:5]
+        
+        overdue_count = overdue_milestones.count()
+        
+    except Exception as e:
+        # If milestone system is not implemented, use basic overdue logic
+        print(f"Milestone system not available: {e}")
+        milestone_stats = []
+        overdue_milestones = []
+
+    # Recent cases with basic data
+    recent_cases = cases.select_related('case_type', 'current_holder').order_by('-registration_date')[:10]
+
+    context = {
+        'total_cases': total_cases,
+        'pending_cases': pending_cases,
+        'completed_today': completed_today,
+        'overdue_milestones': overdue_count,
+        'priority_stats': priority_stats,
+        'milestone_stats': milestone_stats,
+        'recent_cases': recent_cases,
+        'overdue_milestones': overdue_milestones,
+        'user_role': user_profile.role,
+        'now': now,
+    }
+
+    return render(request, 'cases/enhanced_dashboard.html', context)
+
+# Add these updated view functions to your views.py to handle the enhanced functionality
+
+@login_required
+def register_case_enhanced(request):
+    """Enhanced case registration with dynamic fields - with fallbacks"""
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                # Get basic case data
+                case_type_id = request.POST.get('case_type')
+                case_type = get_object_or_404(CaseType, id=case_type_id)
+
+                # Create the case using existing logic
+                case = Case(
+                    case_type=case_type,
+                    sub_category=request.POST.get('sub_category', ''),
+                    case_title=request.POST.get('case_title', ''),
+                    case_description=request.POST.get('case_description', ''),
+                    applicant_name=request.POST.get('applicant_name', ''),
+                    priority=request.POST.get('priority', 'Medium'),
+                    current_status='Registered',
+                    current_holder=request.user.userprofile,
+                    created_by=request.user,
+                    last_updated_by=request.user,
+                )
+                case.save()
+
+                # Handle PPO Master association if provided
+                ppo_number = request.POST.get('ppo_number')
+                if ppo_number:
+                    try:
+                        ppo_master = PPOMaster.objects.get(ppo_number=ppo_number)
+                        case.ppo_master = ppo_master
+                        case.save()
+                    except PPOMaster.DoesNotExist:
+                        pass
+
+                # Save dynamic field data (if CaseFieldData model exists)
+                try:
+                    for key, value in request.POST.items():
+                        if key.startswith('dynamic_') and value:
+                            field_name = key.replace('dynamic_', '')
+                            CaseFieldData.objects.create(
+                                case=case,
+                                field_name=field_name,
+                                field_value=value,
+                                created_by=request.user
+                            )
+                except Exception as e:
+                    print(f"Dynamic fields not available: {e}")
+
+                # Initialize milestones (if milestone system is available)
+                try:
+                    if hasattr(case, 'initialize_milestones'):
+                        case.initialize_milestones()
+                except Exception as e:
+                    print(f"Milestone system not available: {e}")
+
+                messages.success(request, f'Case {case.case_id} registered successfully!')
+                return redirect('case_detail', case_id=case.case_id)
+
+        except Exception as e:
+            messages.error(request, f'Error registering case: {str(e)}')
+
+    # GET request - show form
+    case_types = CaseType.objects.filter(is_active=True) if hasattr(CaseType, 'is_active') else CaseType.objects.all()
+    context = {
+        'case_types': case_types,
+    }
+
+    return render(request, 'cases/register_case_enhanced.html', context)
+
+@login_required
+def get_case_type_fields(request, case_type_id):
+    """AJAX endpoint to get dynamic fields for a case type - with fallback"""
+    try:
+        case_type = get_object_or_404(CaseType, id=case_type_id)
+        
+        # Try to get dynamic fields if the system is implemented
+        try:
+            fields = case_type.dynamic_fields.filter(is_active=True).order_by('field_order')
+            fields_data = []
+            
+            for field in fields:
+                field_data = {
+                    'name': field.field_name,
+                    'label': field.field_label,
+                    'type': field.field_type,
+                    'required': field.is_required,
+                    'help_text': field.help_text,
+                    'group': field.field_group,
+                }
+
+                if field.field_type in ['select', 'radio']:
+                    field_data['choices'] = field.get_choices_list()
+
+                fields_data.append(field_data)
+                
+        except Exception as e:
+            # Fallback - return empty fields
+            print(f"Dynamic fields not available: {e}")
+            fields_data = []
+
+        return JsonResponse({
+            'success': True,
+            'fields': fields_data,
+            'sub_categories': case_type.get_sub_categories_list() if hasattr(case_type, 'get_sub_categories_list') else []
+        })
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+def case_detail_enhanced(request, case_id):
+    """Enhanced case detail view with milestone tracking - with fallbacks"""
+    case = get_object_or_404(Case, case_id=case_id)
+
+    # Check if user can view this case (basic permission check)
+    user_profile = request.user.userprofile
+    if user_profile.role != 'ADMIN' and case.current_holder != user_profile:
+        messages.error(request, 'You do not have permission to view this case.')
+        return redirect('dashboard')
+
+    # Get milestone progress (with fallback)
+    milestone_progress = None
+    try:
+        if hasattr(case, 'get_milestone_progress'):
+            milestone_progress = case.get_milestone_progress()
+    except Exception as e:
+        print(f"Milestone system not available: {e}")
+
+    # Get dynamic field data (with fallback)
+    dynamic_data = {}
+    try:
+        if hasattr(case, 'get_dynamic_field_data'):
+            dynamic_data = case.get_dynamic_field_data()
+        else:
+            # Fallback - try to get from CaseFieldData if it exists
+            field_data = CaseFieldData.objects.filter(case=case)
+            for field in field_data:
+                dynamic_data[field.field_name] = {
+                    'label': field.field_name.replace('_', ' ').title(),
+                    'value': field.field_value,
+                    'type': 'text'
+                }
+    except Exception as e:
+        print(f"Dynamic fields not available: {e}")
+
+    # Get case movements
+    movements = CaseMovement.objects.filter(case=case).order_by('-movement_date')[:10]
+
+    context = {
+        'case': case,
+        'milestone_progress': milestone_progress,
+        'dynamic_data': dynamic_data,
+        'movements': movements,
+        'can_edit': case.current_holder == user_profile,
+    }
+
+    return render(request, 'cases/case_detail_enhanced.html', context)
+
+@login_required
+def update_milestone(request, case_id, milestone_id):
+    """Update milestone progress - with fallback"""
+    if request.method == 'POST':
+        try:
+            case = get_object_or_404(Case, case_id=case_id)
+            
+            # Try to get milestone progress if system is available
+            milestone_progress = get_object_or_404(
+                CaseMilestoneProgress, 
+                case=case, 
+                milestone_id=milestone_id
+            )
+
+            # Check permissions
+            if milestone_progress.assigned_to != request.user.userprofile:
+                return JsonResponse({'success': False, 'error': 'Not authorized'})
+
+            action = request.POST.get('action')
+            notes = request.POST.get('notes', '')
+
+            if action == 'start':
+                milestone_progress.status = 'in_progress'
+                milestone_progress.started_date = timezone.now()
+            elif action == 'complete':
+                milestone_progress.status = 'completed'
+                milestone_progress.completed_date = timezone.now()
+                milestone_progress.completed_by = request.user.userprofile
+                if notes:
+                    milestone_progress.notes = notes
+            elif action == 'block':
+                milestone_progress.status = 'blocked'
+                if notes:
+                    milestone_progress.notes = notes
+
+            milestone_progress.save()
+
+            return JsonResponse({
+                'success': True,
+                'message': f'Milestone {action}ed successfully'
+            })
+
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+
+    return JsonResponse({'success': False, 'error': 'Invalid request'})
+
+@login_required
+def milestone_report(request):
+    """Generate milestone completion report - with fallback"""
+    user_profile = request.user.userprofile
+    
+    # Get cases based on user role
+    if user_profile.role == 'ADMIN':
+        cases = Case.objects.all()
+    else:
+        cases = Case.objects.filter(current_holder=user_profile)
+
+    # Filter by date range if provided
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    try:
+        milestone_progress = CaseMilestoneProgress.objects.filter(case__in=cases)
+
+        if start_date:
+            milestone_progress = milestone_progress.filter(created_at__gte=start_date)
+        if end_date:
+            milestone_progress = milestone_progress.filter(created_at__lte=end_date)
+
+        # Statistics
+        total_milestones = milestone_progress.count()
+        completed_milestones = milestone_progress.filter(status='completed').count()
+        pending_milestones = milestone_progress.filter(status='pending').count()
+        overdue_milestones = milestone_progress.filter(
+            status__in=['pending', 'in_progress'],
+            expected_completion_date__lt=timezone.now()
+        ).count()
+
+        # Milestone completion by case type
+        case_type_stats = milestone_progress.values(
+            'milestone__case_type__name'
+        ).annotate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='completed'))
+        )
+
+        milestone_progress_list = milestone_progress.select_related('case', 'milestone')[:50]
+
+    except Exception as e:
+        # Fallback if milestone system is not available
+        print(f"Milestone system not available: {e}")
+        total_milestones = 0
+        completed_milestones = 0
+        pending_milestones = 0
+        overdue_milestones = 0
+        case_type_stats = []
+        milestone_progress_list = []
+
+    context = {
+        'total_milestones': total_milestones,
+        'completed_milestones': completed_milestones,
+        'pending_milestones': pending_milestones,
+        'overdue_milestones': overdue_milestones,
+        'case_type_stats': case_type_stats,
+        'milestone_progress': milestone_progress_list,
+    }
+
+    return render(request, 'cases/milestone_report.html', context)

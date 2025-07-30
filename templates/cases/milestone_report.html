@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Milestone Report{% endblock %}
+
+{% block extra_css %}
+<style>
+    .milestone-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border-left: 4px solid #007bff;
+    }
+
+    .milestone-card.overdue {
+        border-left-color: #dc3545;
+    }
+
+    .milestone-card.completed {
+        border-left-color: #28a745;
+    }
+
+    .milestone-card.in-progress {
+        border-left-color: #ffc107;
+    }
+
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .stats-card h3 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+
+    .stats-card.danger {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+    }
+
+    .stats-card.success {
+        background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+    }
+
+    .stats-card.warning {
+        background: linear-gradient(135deg, #feca57 0%, #ff9ff3 100%);
+    }
+
+    .progress-ring {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 20px;
+    }
+
+    .progress-ring circle {
+        transition: stroke-dasharray 0.3s ease;
+    }
+
+    .milestone-timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+
+    .milestone-timeline::before {
+        content: '';
+        position: absolute;
+        left: 15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #dee2e6;
+    }
+
+    .milestone-item {
+        position: relative;
+        margin-bottom: 20px;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .milestone-status-indicator {
+        position: absolute;
+        left: -22px;
+        top: 20px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 0 0 1px #dee2e6;
+    }
+
+    .milestone-status-indicator.completed {
+        background: #28a745;
+    }
+
+    .milestone-status-indicator.in_progress {
+        background: #ffc107;
+    }
+
+    .milestone-status-indicator.pending {
+        background: #6c757d;
+    }
+
+    .milestone-status-indicator.blocked {
+        background: #dc3545;
+    }
+
+    .overdue-indicator {
+        background: #dc3545;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        margin-left: 10px;
+    }
+
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        
+        .milestone-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2>Milestone Report</h2>
+                    <p class="text-muted mb-0">Track milestone progress across all cases</p>
+                </div>
+                <div class="no-print">
+                    <button class="btn btn-primary" onclick="window.print()">
+                        <i class="fas fa-print"></i> Print Report
+                    </button>
+                    <button class="btn btn-success" onclick="exportReport()">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h3 id="totalMilestones">{{ stats.total_milestones|default:0 }}</h3>
+                <p class="mb-0">Total Milestones</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card success">
+                <h3 id="completedMilestones">{{ stats.completed_milestones|default:0 }}</h3>
+                <p class="mb-0">Completed</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card warning">
+                <h3 id="inProgressMilestones">{{ stats.in_progress_milestones|default:0 }}</h3>
+                <p class="mb-0">In Progress</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card danger">
+                <h3 id="overdueMilestones">{{ stats.overdue_milestones|default:0 }}</h3>
+                <p class="mb-0">Overdue</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Overview -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5>Overall Progress</h5>
+                <div class="d-flex justify-content-center align-items-center">
+                    <svg class="progress-ring" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="54" fill="transparent" stroke="#e9ecef" stroke-width="12"/>
+                        <circle cx="60" cy="60" r="54" fill="transparent" stroke="#28a745" stroke-width="12"
+                                stroke-dasharray="{{ stats.progress_circumference|default:339 }} {{ stats.progress_gap|default:0 }}"
+                                stroke-dashoffset="0" transform="rotate(-90 60 60)"/>
+                        <text x="60" y="65" text-anchor="middle" font-size="20" font-weight="bold">
+                            {{ stats.completion_percentage|default:0 }}%
+                        </text>
+                    </svg>
+                </div>
+                <p class="text-center text-muted">Completion Rate</p>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5>Milestone Status Distribution</h5>
+                <canvas id="statusChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row no-print">
+        <div class="col-12">
+            <div class="filter-section">
+                <h6>Filters</h6>
+                <form id="filterForm" class="row">
+                    <div class="col-md-3">
+                        <label for="statusFilter">Status:</label>
+                        <select class="form-control" id="statusFilter" name="status">
+                            <option value="">All Statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="blocked">Blocked</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="assigneeFilter">Assignee:</label>
+                        <select class="form-control" id="assigneeFilter" name="assignee">
+                            <option value="">All Assignees</option>
+                            {% for assignee in assignees %}
+                                <option value="{{ assignee.id }}">{{ assignee.user.get_full_name|default:assignee.user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="overdueFilter">Show Overdue:</label>
+                        <select class="form-control" id="overdueFilter" name="overdue">
+                            <option value="">All</option>
+                            <option value="true">Overdue Only</option>
+                            <option value="false">Not Overdue</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label>&nbsp;</label>
+                        <div>
+                            <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+                            <button type="button" class="btn btn-secondary" onclick="clearFilters()">Clear</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Milestone Details -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Milestone Details</h5>
+                </div>
+                <div class="card-body">
+                    <div id="milestonesList">
+                        {% if milestones %}
+                            <div class="milestone-timeline">
+                                {% for milestone in milestones %}
+                                    <div class="milestone-item">
+                                        <div class="milestone-status-indicator {{ milestone.status }}"></div>
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <div class="d-flex align-items-start justify-content-between">
+                                                    <div>
+                                                        <h6 class="mb-1">{{ milestone.milestone.name }}</h6>
+                                                        <p class="text-muted mb-2">{{ milestone.milestone.description }}</p>
+                                                        <div class="d-flex align-items-center">
+                                                            <span class="badge badge-{% if milestone.status == 'completed' %}success{% elif milestone.status == 'in_progress' %}warning{% elif milestone.status == 'blocked' %}danger{% else %}secondary{% endif %}">
+                                                                {{ milestone.get_status_display }}
+                                                            </span>
+                                                            {% if milestone.assigned_to %}
+                                                                <span class="ml-2 text-muted">
+                                                                    <i class="fas fa-user"></i> {{ milestone.assigned_to.user.get_full_name|default:milestone.assigned_to.user.username }}
+                                                                </span>
+                                                            {% endif %}
+                                                            {% if milestone.is_overdue %}
+                                                                <span class="overdue-indicator">
+                                                                    <i class="fas fa-exclamation-triangle"></i> Overdue
+                                                                </span>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% if milestone.notes %}
+                                                    <div class="mt-2">
+                                                        <small class="text-muted">
+                                                            <strong>Notes:</strong> {{ milestone.notes }}
+                                                        </small>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-4 text-right">
+                                                <div class="mb-2">
+                                                    <strong>Case:</strong> 
+                                                    <a href="{% url 'enhanced_case_detail' milestone.case.case_id %}" class="text-decoration-none">
+                                                        {{ milestone.case.case_id }}
+                                                    </a>
+                                                </div>
+                                                {% if milestone.expected_completion_date %}
+                                                    <div class="mb-2">
+                                                        <small class="text-muted">
+                                                            <strong>Due:</strong> {{ milestone.expected_completion_date|date:"d M Y" }}
+                                                        </small>
+                                                    </div>
+                                                {% endif %}
+                                                {% if milestone.completion_date %}
+                                                    <div class="mb-2">
+                                                        <small class="text-success">
+                                                            <strong>Completed:</strong> {{ milestone.completion_date|date:"d M Y" }}
+                                                        </small>
+                                                    </div>
+                                                {% endif %}
+                                                <div>
+                                                    <small class="text-muted">
+                                                        Priority: {{ milestone.case.priority }}
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                                <h5>No Milestones Found</h5>
+                                <p class="text-muted">No milestones match the current filters.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if milestones.has_other_pages %}
+                        <nav aria-label="Milestone pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if milestones.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1">First</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ milestones.previous_page_number }}">Previous</a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">Page {{ milestones.number }} of {{ milestones.paginator.num_pages }}</span>
+                                </li>
+
+                                {% if milestones.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ milestones.next_page_number }}">Next</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ milestones.paginator.num_pages }}">Last</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the status distribution chart
+    const ctx = document.getElementById('statusChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Completed', 'In Progress', 'Pending', 'Blocked'],
+            datasets: [{
+                data: [
+                    {{ stats.completed_milestones|default:0 }},
+                    {{ stats.in_progress_milestones|default:0 }},
+                    {{ stats.pending_milestones|default:0 }},
+                    {{ stats.blocked_milestones|default:0 }}
+                ],
+                backgroundColor: [
+                    '#28a745',
+                    '#ffc107',
+                    '#6c757d',
+                    '#dc3545'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            legend: {
+                position: 'bottom'
+            },
+            tooltips: {
+                callbacks: {
+                    label: function(tooltipItem, data) {
+                        const label = data.labels[tooltipItem.index];
+                        const value = data.datasets[0].data[tooltipItem.index];
+                        const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${label}: ${value} (${percentage}%)`;
+                    }
+                }
+            }
+        }
+    });
+});
+
+function applyFilters() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+    
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
+
+function exportReport() {
+    // Create export functionality
+    const exportData = {
+        stats: {
+            total: {{ stats.total_milestones|default:0 }},
+            completed: {{ stats.completed_milestones|default:0 }},
+            in_progress: {{ stats.in_progress_milestones|default:0 }},
+            overdue: {{ stats.overdue_milestones|default:0 }}
+        },
+        milestones: []
+    };
+    
+    // Collect milestone data
+    document.querySelectorAll('.milestone-item').forEach(item => {
+        const milestone = {
+            name: item.querySelector('h6').textContent,
+            case_id: item.querySelector('a').textContent,
+            status: item.querySelector('.badge').textContent,
+            assignee: item.querySelector('.fa-user')?.parentElement?.textContent?.trim() || 'Unassigned'
+        };
+        exportData.milestones.push(milestone);
+    });
+    
+    // Create and download JSON file
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `milestone_report_${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+}
+</script>
+{% endblock %}

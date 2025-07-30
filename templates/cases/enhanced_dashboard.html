@@ -1,0 +1,372 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Enhanced Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-container {
+        display: flex;
+        gap: 20px;
+        min-height: 80vh;
+    }
+
+    .pending-cases-sidebar {
+        width: 300px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        height: fit-content;
+        position: sticky;
+        top: 20px;
+    }
+
+    .main-dashboard {
+        flex: 1;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border-left: 4px solid #007bff;
+    }
+
+    .stat-card.danger {
+        border-left-color: #dc3545;
+    }
+
+    .stat-card.success {
+        border-left-color: #28a745;
+    }
+
+    .stat-card.warning {
+        border-left-color: #ffc107;
+    }
+
+    .pending-case-item {
+        background: white;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border-left: 3px solid #007bff;
+        transition: all 0.3s ease;
+    }
+
+    .pending-case-item:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        transform: translateY(-1px);
+    }
+
+    .pending-case-item.overdue {
+        border-left-color: #dc3545;
+        background: #fff5f5;
+    }
+
+    .pending-case-item.high-priority {
+        border-left-color: #ffc107;
+        background: #fffbf0;
+    }
+
+    .case-id {
+        font-weight: bold;
+        color: #007bff;
+        font-size: 0.9em;
+    }
+
+    .case-title {
+        font-size: 0.85em;
+        color: #333;
+        margin: 2px 0;
+    }
+
+    .case-meta {
+        font-size: 0.75em;
+        color: #666;
+        display: flex;
+        justify-content: space-between;
+        margin-top: 5px;
+    }
+
+    .milestone-progress {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .milestone-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .milestone-status {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: white;
+    }
+
+    .milestone-status.pending {
+        background: #6c757d;
+    }
+
+    .milestone-status.in_progress {
+        background: #ffc107;
+    }
+
+    .milestone-status.completed {
+        background: #28a745;
+    }
+
+    .milestone-status.blocked {
+        background: #dc3545;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .sidebar-header {
+        background: #007bff;
+        color: white;
+        padding: 10px 15px;
+        margin: -15px -15px 15px -15px;
+        border-radius: 8px 8px 0 0;
+        font-weight: bold;
+    }
+
+    .subordinate-section {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 2px solid #dee2e6;
+    }
+
+    .section-title {
+        font-size: 0.9em;
+        font-weight: bold;
+        color: #495057;
+        margin-bottom: 10px;
+    }
+
+    .no-cases {
+        text-align: center;
+        color: #6c757d;
+        font-style: italic;
+        padding: 20px;
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-container {
+            flex-direction: column;
+        }
+
+        .pending-cases-sidebar {
+            width: 100%;
+            position: static;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Enhanced Dashboard</h2>
+    <div>
+        <a href="{% url 'enhanced_register_case' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Register New Case
+        </a>
+        <a href="{% url 'case_list' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-list"></i> View All Cases
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-container">
+    <!-- Pending Cases Sidebar -->
+    <div class="pending-cases-sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-clock"></i> My Pending Cases
+        </div>
+
+        {% if recent_cases %}
+            {% for case in recent_cases %}
+                <div class="pending-case-item {% if case.expected_completion < now %}overdue{% elif case.priority == 'High' %}high-priority{% endif %}">
+                    <div class="case-id">
+                        <a href="{% url 'enhanced_case_detail' case.case_id %}" class="text-decoration-none">
+                            {{ case.case_id }}
+                        </a>
+                    </div>
+                    <div class="case-title">{{ case.case_type.name }}</div>
+                    <div class="case-meta">
+                        <span class="badge badge-{{ case.priority|lower }}">{{ case.priority }}</span>
+                        <span>{{ case.days_in_current_stage }}d</span>
+                    </div>
+                </div>
+            {% endfor %}
+
+            {% if recent_cases|length == 20 %}
+                <div class="text-center mt-2">
+                    <a href="{% url 'case_list' %}?status=pending" class="btn btn-sm btn-outline-primary">
+                        View All Pending
+                    </a>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="no-cases">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <p>No pending cases!</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Main Dashboard Content -->
+    <div class="main-dashboard">
+        <!-- Statistics Cards -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h4>{{ total_cases|default:0 }}</h4>
+                    <p class="mb-0">Total Cases</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card warning">
+                    <h4>{{ pending_cases|default:0 }}</h4>
+                    <p class="mb-0">Pending</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card success">
+                    <h4>{{ completed_today|default:0 }}</h4>
+                    <p class="mb-0">Completed Today</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card danger">
+                    <h4>{{ overdue_milestones|default:0 }}</h4>
+                    <p class="mb-0">Overdue Milestones</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts and Analytics -->
+        <div class="row">
+            <!-- Priority Distribution -->
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h6>Priority Distribution</h6>
+                    {% if priority_stats %}
+                        {% for stat in priority_stats %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>{{ stat.priority }}</span>
+                                <span class="badge badge-{% if stat.priority == 'High' %}danger{% elif stat.priority == 'Medium' %}warning{% else %}success{% endif %}">
+                                    {{ stat.count }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No data available</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Milestone Status Distribution -->
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h6>Milestone Status</h6>
+                    {% if milestone_stats %}
+                        {% for stat in milestone_stats %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>{{ stat.status|title }}</span>
+                                <span class="badge badge-{% if stat.status == 'completed' %}success{% elif stat.status == 'in_progress' %}warning{% elif stat.status == 'blocked' %}danger{% else %}secondary{% endif %}">
+                                    {{ stat.count }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No milestone data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Overdue Milestones Alert -->
+        {% if overdue_milestones %}
+            <div class="alert alert-warning">
+                <h6><i class="fas fa-exclamation-triangle"></i> Overdue Milestones</h6>
+                <p>You have {{ overdue_milestones|length }} overdue milestone(s) that require attention.</p>
+                <a href="{% url 'milestone_report' %}" class="btn btn-sm btn-warning">View Details</a>
+            </div>
+        {% endif %}
+
+        <!-- Recent Case Activities -->
+        <div class="chart-container">
+            <h6>Recent Cases</h6>
+            {% if recent_cases %}
+                {% for case in recent_cases|slice:":5" %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                        <div>
+                            <strong>
+                                <a href="{% url 'enhanced_case_detail' case.case_id %}">{{ case.case_id }}</a>
+                            </strong>
+                            <span class="text-muted">{{ case.case_type.name }}</span>
+                            <span class="badge badge-info">{{ case.current_holder.user.username }}</span>
+                        </div>
+                        <small class="text-muted">{{ case.registration_date|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No recent activities</p>
+            {% endif %}
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="chart-container">
+            <h6>Quick Actions</h6>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'enhanced_register_case' %}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> New Case
+                </a>
+                <a href="{% url 'case_list' %}?status=pending" class="btn btn-warning btn-sm">
+                    <i class="fas fa-clock"></i> Pending Cases
+                </a>
+                <a href="{% url 'milestone_report' %}" class="btn btn-info btn-sm">
+                    <i class="fas fa-chart-line"></i> Milestone Report
+                </a>
+                <a href="{% url 'case_list' %}?status=overdue" class="btn btn-danger btn-sm">
+                    <i class="fas fa-exclamation-circle"></i> Overdue Cases
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh dashboard every 5 minutes
+setTimeout(function() {
+    location.reload();
+}, 300000);
+
+// Add real-time updates for pending cases count
+function updatePendingCount() {
+    // This could be enhanced with WebSocket for real-time updates
+    console.log('Enhanced Dashboard loaded');
+}
+
+document.addEventListener('DOMContentLoaded', updatePendingCount);
+</script>
+{% endblock %}

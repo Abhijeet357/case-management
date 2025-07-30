@@ -579,3 +579,250 @@ class FamilyPensionClaim(models.Model):
         if self.claim_received:
             self.claim_status = 'received'
         self.save()
+
+class DynamicFormField(models.Model):
+    """Define dynamic fields for different case types"""
+    FIELD_TYPES = [
+        ('text', 'Text Input'),
+        ('textarea', 'Text Area'),
+        ('number', 'Number'),
+        ('date', 'Date'),
+        ('select', 'Select Dropdown'),
+        ('checkbox', 'Checkbox'),
+        ('radio', 'Radio Button'),
+        ('file', 'File Upload'),
+    ]
+
+    DATA_SOURCES = [
+        ('manual', 'Manual Entry'),
+        ('ppo_master', 'PPO Master'),
+        ('retiring_employee', 'Retiring Employee'),
+        ('database_query', 'Database Query'),
+    ]
+
+    case_type = models.ForeignKey(CaseType, on_delete=models.CASCADE, related_name='dynamic_fields')
+    field_name = models.CharField(max_length=100)
+    field_label = models.CharField(max_length=200)
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPES)
+    is_required = models.BooleanField(default=False)
+    help_text = models.TextField(blank=True)
+
+    # For select/radio options
+    choices = models.TextField(blank=True, help_text="One option per line for select/radio fields")
+
+    # Data source configuration
+    data_source = models.CharField(max_length=20, choices=DATA_SOURCES, default='manual')
+    source_field = models.CharField(max_length=100, blank=True, help_text="Field name from data source")
+
+    # Field ordering and grouping
+    field_order = models.IntegerField(default=0)
+    field_group = models.CharField(max_length=100, blank=True, help_text="Group related fields together")
+
+    # Validation
+    min_length = models.IntegerField(null=True, blank=True)
+    max_length = models.IntegerField(null=True, blank=True)
+    regex_pattern = models.CharField(max_length=500, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['field_order', 'field_name']
+        unique_together = ['case_type', 'field_name']
+
+    def __str__(self):
+        return f"{self.case_type.name} - {self.field_label}"
+
+    def get_choices_list(self):
+        """Convert choices text to list"""
+        if self.choices:
+            return [choice.strip() for choice in self.choices.split('\n') if choice.strip()]
+        return []
+
+
+class CaseMilestone(models.Model):
+    """Define milestones for different case types"""
+    case_type = models.ForeignKey(CaseType, on_delete=models.CASCADE, related_name='milestones')
+    milestone_name = models.CharField(max_length=200)
+    milestone_description = models.TextField(blank=True)
+    expected_days = models.IntegerField(default=1, help_text="Expected days to complete this milestone")
+    is_mandatory = models.BooleanField(default=True)
+    milestone_order = models.IntegerField(default=0)
+
+    # Role that should complete this milestone
+    responsible_role = models.CharField(max_length=10, choices=UserProfile.ROLE_CHOICES)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['milestone_order', 'milestone_name']
+        unique_together = ['case_type', 'milestone_name']
+
+    def __str__(self):
+        return f"{self.case_type.name} - {self.milestone_name}"
+
+
+class CaseMilestoneProgress(models.Model):
+    """Track progress of milestones for each case"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('skipped', 'Skipped'),
+        ('blocked', 'Blocked'),
+    ]
+
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='milestone_progress')
+    milestone = models.ForeignKey(CaseMilestone, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    started_date = models.DateTimeField(null=True, blank=True)
+    completed_date = models.DateTimeField(null=True, blank=True)
+    expected_completion_date = models.DateTimeField(null=True, blank=True)
+
+    assigned_to = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='assigned_milestones')
+    completed_by = models.ForeignKey(UserProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='completed_milestones')
+
+    notes = models.TextField(blank=True)
+    attachments = models.FileField(upload_to='milestone_attachments/', null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['milestone__milestone_order']
+        unique_together = ['case', 'milestone']
+
+    def __str__(self):
+        return f"{self.case.case_id} - {self.milestone.milestone_name} ({self.status})"
+
+    def mark_completed(self, completed_by, notes=""):
+        """Mark milestone as completed"""
+        self.status = 'completed'
+        self.completed_date = timezone.now()
+        self.completed_by = completed_by
+        if notes:
+            self.notes = notes
+        self.save()
+
+    def calculate_days_taken(self):
+        """Calculate days taken to complete milestone"""
+        if self.started_date and self.completed_date:
+            return (self.completed_date - self.started_date).days
+        return None
+
+
+class CaseFieldData(models.Model):
+    """Store dynamic field data for cases"""
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='field_data')
+    field = models.ForeignKey(DynamicFormField, on_delete=models.CASCADE)
+
+    # Store different types of data
+    text_value = models.TextField(blank=True, null=True)
+    number_value = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    date_value = models.DateField(null=True, blank=True)
+    boolean_value = models.BooleanField(null=True, blank=True)
+    file_value = models.FileField(upload_to='case_files/', null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['case', 'field']
+
+    def __str__(self):
+        return f"{self.case.case_id} - {self.field.field_name}"
+
+    def get_value(self):
+        """Get the appropriate value based on field type"""
+        field_type = self.field.field_type
+        if field_type in ['text', 'textarea', 'select', 'radio']:
+            return self.text_value
+        elif field_type == 'number':
+            return self.number_value
+        elif field_type == 'date':
+            return self.date_value
+        elif field_type == 'checkbox':
+            return self.boolean_value
+        elif field_type == 'file':
+            return self.file_value
+        return None
+
+    def set_value(self, value):
+        """Set the appropriate value based on field type"""
+        field_type = self.field.field_type
+        if field_type in ['text', 'textarea', 'select', 'radio']:
+            self.text_value = str(value) if value is not None else None
+        elif field_type == 'number':
+            self.number_value = value
+        elif field_type == 'date':
+            self.date_value = value
+        elif field_type == 'checkbox':
+            self.boolean_value = bool(value)
+        elif field_type == 'file':
+            self.file_value = value
+
+
+# Add these methods to your existing Case model (don't replace the model, just add these methods)
+# You can add these methods inside your existing Case class
+
+def get_dynamic_field_data(self):
+    """Get all dynamic field data for this case"""
+    field_data = {}
+    for data in self.field_data.all():
+        field_data[data.field.field_name] = data.get_value()
+    return field_data
+
+def set_dynamic_field_data(self, field_name, value):
+    """Set dynamic field data for this case"""
+    try:
+        field = DynamicFormField.objects.get(case_type=self.case_type, field_name=field_name)
+        field_data, created = CaseFieldData.objects.get_or_create(
+            case=self, 
+            field=field,
+            defaults={'text_value': ''}
+        )
+        field_data.set_value(value)
+        field_data.save()
+        return True
+    except DynamicFormField.DoesNotExist:
+        return False
+
+def get_milestone_progress(self):
+    """Get milestone progress for this case"""
+    return self.milestone_progress.all().order_by('milestone__milestone_order')
+
+def initialize_milestones(self):
+    """Initialize milestones for this case based on case type"""
+    milestones = self.case_type.milestones.filter(is_active=True)
+    for milestone in milestones:
+        progress, created = CaseMilestoneProgress.objects.get_or_create(
+            case=self,
+            milestone=milestone,
+            defaults={
+                'assigned_to': self.current_holder,
+                'expected_completion_date': timezone.now() + timezone.timedelta(days=milestone.expected_days)
+            }
+        )
+    return self.milestone_progress.count()
+
+# Add this to Case model's save method (modify your existing save method)
+def enhanced_save(self, *args, **kwargs):
+    # Your existing save logic here...
+    if not self.case_id:
+        self.case_id = self.generate_case_id()
+    if not self.expected_completion:
+        self.expected_completion = self.calculate_expected_completion()
+
+    # Auto-populate fields from PPO Master if available
+    if self.ppo_master and not self.ppo_number:
+        self.populate_from_ppo_master()
+
+    # Call the original save
+    super().save(*args, **kwargs)
+
+    # Initialize milestones for new cases
+    if not hasattr(self, '_milestones_initialized'):
+        self.initialize_milestones()
+        self._milestones_initialized = True
