@@ -29,7 +29,7 @@ class CaseRegistrationForm(forms.ModelForm):
     date_of_retirement = forms.DateField(required=False, label="Date of Retirement", widget=forms.TextInput(attrs={'readonly': 'readonly', 'placeholder': 'dd-mm-yyyy'}))
     initial_holder = forms.ModelChoiceField(queryset=UserProfile.objects.filter(role='DH', is_active_holder=True), required=True, label="Assigned to Dealing Hand")
 
-    # New fields for Superannuation
+# New fields for Superannuation
     retirement_month = forms.ChoiceField(choices=[(i, f'{i:02d}') for i in range(1, 13)], required=False, label="Month of Retirement")
     retirement_year = forms.ChoiceField(choices=[], required=False, label="Year of Retirement")
 
@@ -37,43 +37,45 @@ class CaseRegistrationForm(forms.ModelForm):
         model = Case
         fields = ['case_type', 'priority', 'ppo_number', 'name_pensioner', 'registered_mobile', 'manual_mobile', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'type_of_pension', 'type_of_pensioner', 'date_of_retirement', 'initial_holder', 'retirement_month', 'retirement_year']
 
-def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    self.helper = FormHelper()
-    self.helper.layout = None  # Remove layout to render manually in template for conditionals
+    # ***** CORRECTED INDENTATION FOR __init__ METHOD *****
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.layout = None  # Remove layout to render manually in template for conditionals
 
-    # Dynamic year choices: current year to current + 2
-    current_year = date.today().year
-    self.fields['retirement_year'].choices = [(y, str(y)) for y in range(current_year, current_year + 3)]
+        # Dynamic year choices: current year to current + 2
+        current_year = date.today().year
+        self.fields['retirement_year'].choices = [(y, str(y)) for y in range(current_year, current_year + 3)]
 
-    # Set retiring_employee queryset dynamically - FIXED VERSION
-    if self.data and self.data.get('retirement_month') and self.data.get('retirement_year'):
-        try:
-            month = int(self.data['retirement_month'])
-            year = int(self.data['retirement_year'])
-            from_date = date(year, month, 1)
-            to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
-            self.fields['retiring_employee'].queryset = RetiringEmployee.objects.filter(
-                retirement_date__gte=from_date,
-                retirement_date__lte=to_date
-            )
-        except (ValueError, TypeError):
+        # Set retiring_employee queryset dynamically - FIXED VERSION
+        if self.data and self.data.get('retirement_month') and self.data.get('retirement_year'):
+            try:
+                month = int(self.data['retirement_month'])
+                year = int(self.data['retirement_year'])
+                from_date = date(year, month, 1)
+                to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
+                self.fields['retiring_employee'].queryset = RetiringEmployee.objects.filter(
+                    retirement_date__gte=from_date,
+                    retirement_date__lte=to_date
+                )
+            except (ValueError, TypeError):
+                self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
+        elif self.initial.get('retirement_month') and self.initial.get('retirement_year'):
+            try:
+                month = int(self.initial['retirement_month'])
+                year = int(self.initial['retirement_year'])
+                from_date = date(year, month, 1)
+                to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
+                self.fields['retiring_employee'].queryset = RetiringEmployee.objects.filter(
+                    retirement_date__gte=from_date,
+                    retirement_date__lte=to_date
+                )
+            except (ValueError, TypeError):
+                self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
+        else:
             self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
-    elif self.initial.get('retirement_month') and self.initial.get('retirement_year'):
-        try:
-            month = int(self.initial['retirement_month'])
-            year = int(self.initial['retirement_year'])
-            from_date = date(year, month, 1)
-            to_date = (from_date + relativedelta(months=1)) - timedelta(days=1)
-            self.fields['retiring_employee'].queryset = RetiringEmployee.objects.filter(
-                retirement_date__gte=from_date,
-                retirement_date__lte=to_date
-            )
-        except (ValueError, TypeError):
-            self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
-    else:
-        self.fields['retiring_employee'].queryset = RetiringEmployee.objects.none()
 
+    # ***** CORRECTED INDENTATION FOR clean METHOD *****
     def clean(self):
         cleaned_data = super().clean()
         case_type = cleaned_data.get('case_type')
@@ -103,7 +105,7 @@ def __init__(self, *args, **kwargs):
                 if not cleaned_data.get(field):
                     self.add_error(field, f'This field is required for {type_name}.')
         return cleaned_data
-
+    
 class CaseMovementForm(forms.Form):
     MOVEMENT_CHOICES = [
         ('forward', 'Move Forward'),
