@@ -4,18 +4,19 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count
 from django.utils import timezone
 from django.core.paginator import Paginator
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 import json
 import csv
-from django.db import transaction
+from django.db import transaction, models
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
-from .models import Case, CaseType, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee, DynamicFormField,CaseMilestone,CaseMilestoneProgress, CaseFieldData
-from .forms import CaseRegistrationForm, CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
+from .models import Case, CaseType, CaseTypeTrigger, Record,RecordRequisition,RecordMovement,Location, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee, DynamicFormField,CaseMilestone,CaseMilestoneProgress, CaseFieldData
+from .forms import CaseRegistrationForm,CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
+from .forms import RecordRequisitionForm, RecordReturnForm
 
 @login_required
 def dashboard(request):
@@ -234,7 +235,10 @@ def register_case(request):
                 action='Case registered',
                 updated_by=request.user
             )
-            
+
+            if case.ppo_master:
+                    trigger_auto_requisition(case, user_profile, request) # Pass request for messages
+                           
             # For Death Intimation, create claim
             if case.case_type.name == 'Death Intimation':
                 FamilyPensionClaim.objects.create(
@@ -266,150 +270,91 @@ def register_case(request):
 
 @login_required
 def move_case(request, case_id):
-    """Move case to next/previous stage or reassign"""
+    """
+    Move case to next/previous stage or reassign, AND transfer any associated
+    physical records held by the current user.
+    """
     case = get_object_or_404(Case, case_id=case_id)
     user_profile = get_object_or_404(UserProfile, user=request.user)
-    
-    # Check permissions
+
     if user_profile.role != 'ADMIN' and case.current_holder != user_profile:
         messages.error(request, "You don't have permission to move this case.")
-        return redirect('case_detail', case_id=case_id)
+        return redirect('case_detail', case_id=case.case_id)
+
+    records_to_move = []
+    # CORRECTED: Use .filter().first() to safely get the location, preventing a crash if duplicates exist.
+    current_holder_location = Location.objects.filter(custodian=case.current_holder, location_type='USER_DESK').first()
     
-    preview_message = ""
-    pre_type = request.GET.get('type') if request.method == 'GET' else None
-    
-    if request.method == 'GET' and pre_type:
-        workflow = get_workflow_for_case(case)
-        current_index = get_current_stage_index(case, workflow)
-        
-        if pre_type == 'forward':
-            if current_index < len(workflow) - 1:
-                next_stage = workflow[current_index + 1]
-                holders = UserProfile.objects.filter(role=next_stage, is_active_holder=True)
-                if holders.exists():
-                    preview_message = f"Select from available holders in {next_stage} stage."
-                else:
-                    preview_message = f"No available holders in next stage: {next_stage}."
-            else:
-                preview_message = "Case is already at the final stage."
-        elif pre_type == 'backward':
-            if current_index > 0:
-                prev_stage = workflow[current_index - 1]
-                holders = UserProfile.objects.filter(role=prev_stage, is_active_holder=True)
-                if holders.exists():
-                    preview_message = f"Select from available holders in {prev_stage} stage."
-                else:
-                    preview_message = f"No available holders in previous stage: {prev_stage}."
-            else:
-                preview_message = "Case is already at the first stage."
-        elif pre_type == 'complete':
-            preview_message = "This will mark the case as completed."
-        elif pre_type == 'reassign':
-            preview_message = "Select a new holder in the same stage to re-assign."
-    
+    if current_holder_location and case.ppo_master:
+        records_to_move = Record.objects.filter(
+            pensioner=case.ppo_master,
+            current_location=current_holder_location,
+            status='IN_USE'
+        )
+
     if request.method == 'POST':
         form = CaseMovementForm(request.POST, case=case)
         if form.is_valid():
-            movement_type = form.cleaned_data['movement_type']
-            comments = form.cleaned_data['comments']
             to_holder = form.cleaned_data.get('to_holder')
-            workflow = get_workflow_for_case(case)
-            current_index = get_current_stage_index(case, workflow)
             from_holder = case.current_holder
-            from_stage = from_holder.role
             
-            # Calculate days in previous stage
-            delta = timezone.now() - case.last_update_date
-            days_prev = delta.days
-            
-            to_stage = None
-            action = None
-            
-            if movement_type in ['forward', 'backward', 'reassign']:
-                if not to_holder:
-                    messages.error(request, "Please select a holder.")
-                    return redirect('case_detail', case_id=case_id)
-                to_stage = to_holder.role
-            
-            if movement_type == 'forward':
-                if current_index >= len(workflow) - 1:
-                    messages.error(request, "Case is already at the final stage.")
-                    return redirect('case_detail', case_id=case_id)
-                expected_stage = workflow[current_index + 1]
-                if to_stage != expected_stage:
-                    messages.error(request, "Selected holder must be in the next stage.")
-                    return redirect('case_detail', case_id=case_id)
-                action = 'Moved forward'
-                if current_index + 1 == len(workflow) - 1:
+            with transaction.atomic():
+                if to_holder and to_holder != from_holder and records_to_move:
+                    from_holder_location = Location.objects.filter(custodian=from_holder, location_type='USER_DESK').first()
+                    
+                    # CORRECTED: More robust get_or_create based on the unique custodian.
+                    to_holder_location, created = Location.objects.get_or_create(
+                        custodian=to_holder, 
+                        location_type='USER_DESK',
+                        defaults={'name': f"{to_holder.user.username}'s Desk"}
+                    )
+
+                    if from_holder_location:
+                        for record in records_to_move:
+                            RecordMovement.objects.create(
+                                requisition=None,
+                                record=record,
+                                from_location=from_holder_location,
+                                to_location=to_holder_location,
+                                acknowledged_by=user_profile,
+                                comments=f"Transferred automatically as part of case movement for {case.case_id}."
+                            )
+                            record.current_location = to_holder_location
+                            record.save()
+                
+                # --- Existing logic for moving the case ---
+                movement_type = form.cleaned_data['movement_type']
+                if movement_type == 'complete':
                     case.is_completed = True
                     case.actual_completion = timezone.now()
                     case.current_status = 'Completed'
-                else:
+                elif to_holder:
+                    case.current_holder = to_holder
                     case.current_status = f"With {to_holder.user.username}"
-            elif movement_type == 'backward':
-                if current_index <= 0:
-                    messages.error(request, "Case is already at the first stage.")
-                    return redirect('case_detail', case_id=case_id)
-                expected_stage = workflow[current_index - 1]
-                if to_stage != expected_stage:
-                    messages.error(request, "Selected holder must be in the previous stage.")
-                    return redirect('case_detail', case_id=case_id)
-                action = 'Moved backward'
-                if case.is_completed:
-                    case.is_completed = False
-                    case.actual_completion = None
-                case.current_status = f"With {to_holder.user.username}"
-            elif movement_type == 'reassign':
-                if to_stage != from_stage:
-                    messages.error(request, "New holder must be in the same stage.")
-                    return redirect('case_detail', case_id=case_id)
-                action = 'Re-assigned'
-                case.current_status = f"With {to_holder.user.username}"
-            elif movement_type == 'complete':
-                if current_index < 1:  # DH is index 0, not allowed
-                    messages.error(request, "Cases can only be completed from AAO onwards.")
-                    return redirect('case_detail', case_id=case_id)
-                to_holder = from_holder  # Keep current holder
-                to_stage = 'Completed'
-                action = 'Marked as Completed'
-                case.is_completed = True
-                case.actual_completion = timezone.now()
-                case.current_status = 'Completed'
-            
-            # Update case
-            case.days_in_current_stage = 0
-            case.total_days_pending += days_prev
-            if to_holder:
-                case.current_holder = to_holder
-            case.status_color = get_status_color(to_stage or from_stage, case.priority) if to_stage != 'Completed' else 'Blue'
-            case.last_updated_by = request.user
-            case.last_update_date = timezone.now()
-            case.save()
-            
-            # Log movement
-            CaseMovement.objects.create(
-                case=case,
-                from_stage=from_stage,
-                to_stage=to_stage or from_stage,
-                from_holder=from_holder,
-                to_holder=to_holder,
-                action=action,
-                comments=comments,
-                days_in_previous_stage=days_prev,
-                updated_by=request.user
-            )
-            
-            messages.success(request, f"Case updated successfully.")
-            return redirect('case_detail', case_id=case_id)
+                case.last_updated_by = request.user
+                case.save()
+
+                CaseMovement.objects.create(
+                    case=case, from_stage=from_holder.role,
+                    to_stage=to_holder.role if to_holder else 'Completed',
+                    from_holder=from_holder, to_holder=to_holder,
+                    action=movement_type, comments=form.cleaned_data['comments'],
+                    updated_by=request.user
+                )
+
+            messages.success(request, f"Case and associated records updated successfully.")
+            return redirect('case_detail', case_id=case.case_id)
     else:
-        initial = {'movement_type': pre_type}
-        form = CaseMovementForm(case=case, initial=initial)
-    
-    return render(request, 'cases/move_case.html', {
-        'form': form, 
-        'case': case,
-        'preview_message': preview_message,
-    })
+        form = CaseMovementForm(case=case)
+
+    context = {
+        'form': form, 'case': case,
+        'workflow': get_workflow_for_case(case),
+        'current_stage_index': get_current_stage_index(case, get_workflow_for_case(case)),
+        'records_to_move': records_to_move,
+    }
+    return render(request, 'cases/move_case.html', context)
+
 
 @login_required
 @require_http_methods(["GET"])
@@ -1158,3 +1103,295 @@ def milestone_report(request):
     }
 
     return render(request, 'cases/milestone_report.html', context)
+@login_required
+def request_record(request, case_id):
+    """
+    Handles the creation of a new record requisition for a specific case.
+    Only accessible by users with the 'Dealing Hand' (DH) role.
+    """
+    case = get_object_or_404(Case, case_id=case_id)
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+
+    # Permission Check: Only a Dealing Hand can initiate a requisition.
+    # You can customize this role check if needed.
+    if user_profile.role != 'DH':
+        messages.error(request, "You do not have permission to request records.")
+        return redirect('case_detail', case_id=case.case_id)
+
+    if request.method == 'POST':
+        # When the form is submitted
+        form = RecordRequisitionForm(request.POST, case=case)
+        if form.is_valid():
+            try:
+                # Use a database transaction to ensure data integrity.
+                # If any step fails, all database changes will be rolled back.
+                with transaction.atomic():
+                    requisition = form.save(commit=False)
+                    requisition.case = case
+                    requisition.requester_dh = user_profile
+                    # The 'approving_aao' is set from the form
+                    requisition.save()
+
+                    # The form saves the ManyToMany relationship for records_requested
+                    form.save_m2m()
+
+                    # Update the status of the requested physical records
+                    requested_records = form.cleaned_data['records_requested']
+                    for record in requested_records:
+                        record.status = 'REQUISITIONED'
+                        record.save()
+
+                messages.success(request, f"Record requisition for case {case.case_id} has been submitted for approval.")
+                return redirect('case_detail', case_id=case.case_id)
+            except Exception as e:
+                # Catch any potential errors during the process
+                messages.error(request, f"An error occurred while submitting the requisition: {e}")
+
+    else:
+        # When the page is first loaded (GET request)
+        form = RecordRequisitionForm(case=case)
+
+    context = {
+        'form': form,
+        'case': case,
+    }
+    return render(request, 'cases/request_record.html', context)
+
+# ==============================================================================
+# == MODIFIED VIEWS FOR AAO APPROVAL WORKFLOW (Phase 6)
+# ==============================================================================
+
+# == RECORD MANAGEMENT WORKFLOW VIEWS ==
+
+@login_required
+def request_record(request, case_id):
+    case = get_object_or_404(Case, case_id=case_id)
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    if user_profile.role != 'DH':
+        messages.error(request, "You do not have permission to request records.")
+        return redirect('case_detail', case_id=case.case_id)
+    if request.method == 'POST':
+        form = RecordRequisitionForm(request.POST, case=case)
+        if form.is_valid():
+            with transaction.atomic():
+                requisition = form.save(commit=False)
+                requisition.case = case
+                requisition.requester_dh = user_profile
+                requisition.save()
+                form.save_m2m()
+                for record in form.cleaned_data['records_requested']:
+                    record.status = 'REQUISITIONED'
+                    record.save()
+            messages.success(request, "Record requisition has been submitted for approval.")
+            return redirect('case_detail', case_id=case.case_id)
+    else:
+        form = RecordRequisitionForm(case=case)
+    return render(request, 'cases/request_record.html', {'form': form, 'case': case})
+
+@login_required
+def requisition_approval_dashboard(request):
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    if user_profile.role != 'AAO':
+        messages.error(request, "You do not have permission to view this page.")
+        return redirect('dashboard')
+    pending_requests = RecordRequisition.objects.filter(
+        models.Q(status='PENDING_APPROVAL') | models.Q(status='RETURN_REQUESTED'),
+        approving_aao=user_profile
+    ).select_related('case', 'requester_dh', 'case__ppo_master').prefetch_related('records_requested')
+    return render(request, 'cases/requisition_approval_dashboard.html', {'pending_requests': pending_requests})
+
+@require_POST
+@login_required
+def requisition_action(request, requisition_id):
+    requisition = get_object_or_404(RecordRequisition, id=requisition_id)
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    if requisition.approving_aao != user_profile:
+        return HttpResponseForbidden("You are not authorized to perform this action.")
+    action = request.POST.get('action')
+    original_status = requisition.status
+    if original_status == 'PENDING_APPROVAL':
+        if action == 'approve':
+            requisition.status = 'APPROVED'
+            messages.success(request, f"Requisition for case {requisition.case.case_id} has been approved.")
+        elif action == 'reject':
+            requisition.status = 'REJECTED'
+            with transaction.atomic():
+                for record in requisition.records_requested.all():
+                    record.status = 'AVAILABLE'
+                    record.save()
+            messages.warning(request, f"Requisition for case {requisition.case.case_id} has been rejected.")
+    elif original_status == 'RETURN_REQUESTED':
+        if action == 'approve':
+            requisition.status = 'RETURN_APPROVED'
+            messages.success(request, f"Return request for case {requisition.case.case_id} has been approved.")
+        elif action == 'reject':
+            requisition.status = 'RETURN_REJECTED'
+            messages.warning(request, f"Return request for case {requisition.case.case_id} has been rejected.")
+    requisition.save()
+    return redirect('requisition_approval_dashboard')
+
+@login_required
+def record_keeper_dashboard(request):
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    if not user_profile.is_record_keeper:
+        messages.error(request, "You do not have permission to view this page.")
+        return redirect('dashboard')
+    approved_requisitions = RecordRequisition.objects.filter(status='APPROVED')
+    approved_returns = RecordRequisition.objects.filter(status='RETURN_APPROVED')
+    context = {
+        'approved_requisitions': approved_requisitions,
+        'approved_returns': approved_returns,
+    }
+    return render(request, 'cases/record_keeper_dashboard.html', context)
+
+@require_POST
+@login_required
+def handover_record(request, requisition_id):
+    requisition = get_object_or_404(RecordRequisition, id=requisition_id)
+    record_keeper_profile = get_object_or_404(UserProfile, user=request.user)
+
+    if not record_keeper_profile.is_record_keeper:
+        return HttpResponseForbidden("You are not authorized to perform this action.")
+
+    receiving_dh_profile = requisition.requester_dh
+    try:
+        with transaction.atomic():
+            # CORRECTED: More robust get_or_create based on the unique custodian.
+            to_location, created = Location.objects.get_or_create(
+                custodian=receiving_dh_profile,
+                location_type='USER_DESK',
+                defaults={'name': f"{receiving_dh_profile.user.username}'s Desk"}
+            )
+            for record in requisition.records_requested.all():
+                from_location = record.current_location
+                RecordMovement.objects.create(
+                    requisition=requisition, record=record, from_location=from_location,
+                    to_location=to_location, acknowledged_by=record_keeper_profile
+                )
+                record.status = 'IN_USE'
+                record.current_location = to_location
+                record.save()
+            requisition.status = 'IN_USE'
+            requisition.save()
+        messages.success(request, f"Records for case {requisition.case.case_id} have been successfully marked as handed over.")
+    except Exception as e:
+        messages.error(request, f"An error occurred during handover: {e}")
+    return redirect('record_keeper_dashboard')
+
+
+@login_required
+def return_record(request, case_id):
+    case = get_object_or_404(Case, case_id=case_id)
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    if user_profile.role != 'DH':
+        messages.error(request, "You do not have permission to return records.")
+        return redirect('case_detail', case_id=case.case_id)
+    if request.method == 'POST':
+        form = RecordReturnForm(request.POST, case=case, user=user_profile)
+        if form.is_valid():
+            with transaction.atomic():
+                return_request = form.save(commit=False)
+                return_request.case = case
+                return_request.requester_dh = user_profile
+                return_request.is_return_request = True
+                return_request.status = 'RETURN_REQUESTED'
+                return_request.save()
+                form.save_m2m()
+            messages.success(request, f"Request to return records for case {case.case_id} has been submitted.")
+            return redirect('case_detail', case_id=case.case_id)
+    else:
+        form = RecordReturnForm(case=case, user=user_profile)
+    return render(request, 'cases/return_record.html', {'form': form, 'case': case})
+
+@require_POST
+@login_required
+def acknowledge_return(request, requisition_id):
+    requisition = get_object_or_404(RecordRequisition, id=requisition_id)
+    record_keeper_profile = get_object_or_404(UserProfile, user=request.user)
+
+    if not record_keeper_profile.is_record_keeper:
+        return HttpResponseForbidden("You are not authorized to perform this action.")
+
+    try:
+        with transaction.atomic():
+            record_room, created = Location.objects.get_or_create(
+                name='CTO Record Room', defaults={'location_type': 'RECORD_ROOM'}
+            )
+            returning_dh_profile = requisition.requester_dh
+            
+            # CORRECTED: Use .filter().first() to safely get the location.
+            from_location = Location.objects.filter(custodian=returning_dh_profile, location_type='USER_DESK').first()
+            if not from_location:
+                raise Location.DoesNotExist # Raise an error if the user's location can't be found
+
+            for record in requisition.records_requested.all():
+                RecordMovement.objects.create(
+                    requisition=requisition, record=record, from_location=from_location,
+                    to_location=record_room, acknowledged_by=record_keeper_profile,
+                    comments=f"Record returned to {record_room.name} for case {requisition.case.case_id}."
+                )
+                record.status = 'AVAILABLE'
+                record.current_location = record_room
+                record.save()
+            requisition.status = 'RETURNED'
+            requisition.save()
+        messages.success(request, f"Return for case {requisition.case.case_id} has been successfully acknowledged.")
+    except Location.DoesNotExist:
+        messages.error(request, f"Could not find the 'User Desk' location for {returning_dh_profile.user.username}. Cannot process return.")
+    except Exception as e:
+        messages.error(request, f"An error occurred while acknowledging the return: {e}")
+    return redirect('record_keeper_dashboard')
+
+def get_default_approver_and_keeper():
+    """
+    Finds default users for automated requisitions.
+    - Approver: The first active AAO found.
+    - Keeper: The first user flagged as a record keeper.
+    This can be made more sophisticated later if needed.
+    """
+    default_approver = UserProfile.objects.filter(role='AAO', is_active_holder=True).first()
+    return default_approver
+
+def trigger_auto_requisition(case, user_profile, request):
+    """
+    Checks for and creates an automated record requisition for a newly created case.
+    """
+    triggers = CaseTypeTrigger.objects.filter(
+        case_type=case.case_type,
+        trigger_event='ON_CASE_CREATION'
+    )
+    if not triggers.exists():
+        return
+
+    record_types_to_request = [trigger.records_to_request for trigger in triggers]
+    records = Record.objects.filter(
+        pensioner=case.ppo_master,
+        record_type__in=record_types_to_request,
+        status='AVAILABLE'
+    )
+    if not records.exists():
+        return
+
+    default_approver = get_default_approver_and_keeper()
+    if not default_approver:
+        print(f"AUTO-REQUISITION FAILED: No default AAO approver found for case {case.case_id}.")
+        return
+
+    try:
+        with transaction.atomic():
+            requisition = RecordRequisition.objects.create(
+                case=case,
+                requester_dh=user_profile,
+                approving_aao=default_approver,
+                status='PENDING_APPROVAL'
+            )
+            requisition.records_requested.set(records)
+            for record in records:
+                record.status = 'REQUISITIONED'
+                record.save()
+        
+        # Now it can correctly use the 'request' object to show a message
+        messages.info(request, f"An automated record requisition has been created for this case and sent for approval.")
+
+    except Exception as e:
+        print(f"AUTO-REQUISITION FAILED: Error creating requisition for case {case.case_id}: {e}")

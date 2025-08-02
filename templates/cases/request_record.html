@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Request Records for Case: {{ case.case_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Request Records for Case: {{ case.case_id }}</h4>
+        </div>
+        <div class="card-body">
+            <h5 class="card-title">Case Title: {{ case.case_title }}</h5>
+            <p class="card-text">
+                <strong>Pensioner:</strong> {{ case.ppo_master.employee_name }}<br>
+                <strong>PPO Number:</strong> {{ case.ppo_master.ppo_number }}
+            </p>
+            <hr>
+
+            {% if form.fields.records_requested.queryset.exists %}
+                <p class="text-muted">Please select the records you wish to requisition for this case and choose an approving officer.</p>
+                
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    {{ form|crispy }}
+                    
+                    <a href="{% url 'case_detail' case.case_id %}" class="btn btn-secondary mt-3">Cancel</a>
+                </form>
+            {% else %}
+                <div class="alert alert-warning" role="alert">
+                    <h4 class="alert-heading">No Available Records!</h4>
+                    <p>There are no records currently available for requisition for this pensioner. They may already be in use or marked as not applicable.</p>
+                    <hr>
+                    <a href="{% url 'case_detail' case.case_id %}" class="btn btn-secondary">Go Back to Case Details</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

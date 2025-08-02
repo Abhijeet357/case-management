@@ -1,5 +1,4 @@
 {% extends 'base.html' %}
-
 {% load crispy_forms_tags %}
 
 {% block title %}Move Case: {{ case.case_id }}{% endblock %}
@@ -9,35 +8,6 @@
     <div class="row">
         <div class="col-md-8">
             <h2>Move Case: {{ case.case_id }}</h2>
-
-            <!-- Current Case Status -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5>Current Case Status</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Case Title:</strong> {{ case.case_title }}</p>
-                            <p><strong>Current Status:</strong> 
-                                <span class="badge badge-{{ case.status_color|lower }}">{{ case.current_status }}</span>
-                            </p>
-                            <p><strong>Current Holder:</strong> {{ case.current_holder.user.get_full_name|default:case.current_holder.user.username }} 
-                                <small class="text-muted">({{ case.current_holder.get_role_display }})</small>
-                            </p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Priority:</strong> 
-                                <span class="badge badge-{% if case.priority == 'High' %}danger{% elif case.priority == 'Medium' %}warning{% else %}success{% endif %}">
-                                    {{ case.priority }}
-                                </span>
-                            </p>
-                            <p><strong>Days in Current Stage:</strong> {{ case.days_in_current_stage }}</p>
-                            <p><strong>Total Days Pending:</strong> {{ case.total_days_pending }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- Workflow Progress -->
             <div class="card mb-4">
@@ -65,48 +35,13 @@
                     <h5>Move Case</h5>
                 </div>
                 <div class="card-body">
-                    {% if preview_message %}
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i> {{ preview_message|safe }}
-                        </div>
-                    {% endif %}
-
                     <form method="post" id="moveCaseForm">
                         {% csrf_token %}
+                        
+                        <!-- The form is rendered by Crispy Forms for consistency -->
+                        {{ form|crispy }}
 
-                        <div class="form-group">
-                            <label for="{{ form.movement_type.id_for_label }}">{{ form.movement_type.label }}</label>
-                            {{ form.movement_type }}
-                            {% if form.movement_type.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.movement_type.errors %}{{ error }}{% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
-
-                        <div class="form-group" id="holder-selection" style="display: none;">
-                            <label for="{{ form.to_holder.id_for_label }}">{{ form.to_holder.label }}</label>
-                            {{ form.to_holder }}
-                            {% if form.to_holder.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.to_holder.errors %}{{ error }}{% endfor %}
-                                </div>
-                            {% endif %}
-                            <small class="form-text text-muted" id="holder-help-text"></small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="{{ form.comments.id_for_label }}">{{ form.comments.label }} <span class="text-danger">*</span></label>
-                            {{ form.comments }}
-                            {% if form.comments.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.comments.errors %}{{ error }}{% endfor %}
-                                </div>
-                            {% endif %}
-                            <small class="form-text text-muted">Please provide a reason for this movement.</small>
-                        </div>
-
-                        <div class="form-group">
+                        <div class="form-group mt-4">
                             <button type="submit" class="btn btn-primary" id="submitBtn">
                                 <i class="fas fa-arrow-right"></i> Confirm Movement
                             </button>
@@ -119,236 +54,133 @@
             </div>
         </div>
 
-        <!-- Available Actions Sidebar -->
+        <!-- Sidebar -->
         <div class="col-md-4">
             <div class="card">
-                <div class="card-header">
-                    <h5>Available Actions</h5>
-                </div>
-                <div class="card-body">
-                    {% for action in available_actions %}
-                        <div class="action-item mb-3">
-                            <a href="?type={{ action.type }}" 
-                               class="btn btn-outline-primary btn-sm {% if not action.available %}disabled{% endif %}"
-                               {% if not action.available %}disabled{% endif %}>
-                                {% if action.type == 'forward' %}
-                                    <i class="fas fa-arrow-up"></i>
-                                {% elif action.type == 'backward' %}
-                                    <i class="fas fa-arrow-down"></i>
-                                {% elif action.type == 'reassign' %}
-                                    <i class="fas fa-exchange-alt"></i>
-                                {% elif action.type == 'complete' %}
-                                    <i class="fas fa-check-circle"></i>
-                                {% endif %}
-                                {{ action.label }}
-                            </a>
-                            {% if action.holders_count > 0 %}
-                                <small class="text-muted d-block">{{ action.holders_count }} holder(s) available</small>
-                            {% elif not action.available and action.type != 'complete' %}
-                                <small class="text-danger d-block">No holders available</small>
-                            {% endif %}
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- Case Information -->
-            <div class="card mt-3">
                 <div class="card-header">
                     <h5>Case Information</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>Case Type:</strong> {{ case.case_type.name }}</p>
-                    <p><strong>Sub Category:</strong> {{ case.sub_category }}</p>
-                    <p><strong>Applicant:</strong> {{ case.applicant_name }}</p>
-                    {% if case.ppo_number %}
-                        <p><strong>PPO Number:</strong> {{ case.ppo_number }}</p>
-                    {% endif %}
+                    <p><strong>Case Title:</strong> {{ case.case_title }}</p>
+                    <p><strong>Current Holder:</strong> {{ case.current_holder.user.get_full_name|default:case.current_holder.user.username }}</p>
+                    <p><strong>Current Stage:</strong> {{ case.current_holder.get_role_display }}</p>
+                    <p><strong>Priority:</strong> 
+                        <span class="badge {% if case.priority == 'High' %}bg-danger{% elif case.priority == 'Medium' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                            {{ case.priority }}
+                        </span>
+                    </p>
                     <p><strong>Registration Date:</strong> {{ case.registration_date|date:"d-m-Y" }}</p>
-                    <p><strong>Expected Completion:</strong> {{ case.expected_completion|date:"d-m-Y" }}</p>
                 </div>
             </div>
+
+            <!-- ============================================================================== -->
+            <!-- == NEW: Display Records to be Transferred                                   == -->
+            <!-- ============================================================================== -->
+            {% if records_to_move %}
+            <div class="card mt-3">
+                <div class="card-header bg-warning text-dark">
+                    <h5><i class="fas fa-folder-open"></i> Records to be Transferred</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">The following records are currently with you and will be automatically transferred to the next holder along with the case.</p>
+                    <ul class="list-group list-group-flush">
+                        {% for record in records_to_move %}
+                            <li class="list-group-item">{{ record.get_record_type_display }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <style>
-.progress-workflow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.workflow-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 80px;
-}
-
-.step-number {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background-color: #e9ecef;
-    color: #6c757d;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-.step-label {
-    font-size: 0.8rem;
-    text-align: center;
-    color: #6c757d;
-}
-
-.workflow-step.completed .step-number {
-    background-color: #28a745;
-    color: white;
-}
-
-.workflow-step.completed .step-label {
-    color: #28a745;
-    font-weight: bold;
-}
-
-.workflow-step.current .step-number {
-    background-color: #007bff;
-    color: white;
-    animation: pulse 2s infinite;
-}
-
-.workflow-step.current .step-label {
-    color: #007bff;
-    font-weight: bold;
-}
-
-.workflow-arrow {
-    color: #e9ecef;
-    font-size: 1.2rem;
-    margin: 0 5px;
-}
-
-.workflow-arrow.completed {
-    color: #28a745;
-}
-
+.progress-workflow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; }
+.workflow-step { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+.step-number { width: 30px; height: 30px; border-radius: 50%; background-color: #e9ecef; color: #6c757d; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-bottom: 5px; }
+.step-label { font-size: 0.8rem; text-align: center; color: #6c757d; }
+.workflow-step.completed .step-number { background-color: #28a745; color: white; }
+.workflow-step.completed .step-label { color: #28a745; font-weight: bold; }
+.workflow-step.current .step-number { background-color: #0d6efd; color: white; animation: pulse 2s infinite; }
+.workflow-step.current .step-label { color: #0d6efd; font-weight: bold; }
+.workflow-arrow { color: #e9ecef; font-size: 1.2rem; margin: 0 5px; }
+.workflow-arrow.completed { color: #28a745; }
 @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(0, 123, 255, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
 }
-
-.action-item {
-    border-bottom: 1px solid #e9ecef;
-    padding-bottom: 10px;
-}
-
-.action-item:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-}
-
-.badge-green { background-color: #28a745; }
-.badge-orange { background-color: #fd7e14; }
-.badge-red { background-color: #dc3545; }
-.badge-blue { background-color: #007bff; }
 </style>
+{% endblock %}
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% block scripts %}
 <script>
 $(document).ready(function() {
-    console.log('Move case form loaded.');
+    const movementTypeSelect = $('#id_movement_type');
+    const toHolderSelect = $('#id_to_holder');
+    const toHolderGroup = $('#div_id_to_holder'); // Crispy forms creates a div wrapper
+    const submitBtn = $('#submitBtn');
+    const caseId = "{{ case.case_id }}";
+    const getHoldersUrl = "{% url 'get_available_holders' %}";
 
-    // Handle movement type change
-    $('#id_movement_type').on('change', function() {
-        var movementType = $(this).val();
-        var holderSelection = $('#holder-selection');
-        var holderField = $('#id_to_holder');
-        var submitBtn = $('#submitBtn');
-        var helpText = $('#holder-help-text');
+    function updateHolderVisibility() {
+        const movementType = movementTypeSelect.val();
 
-        console.log('Movement type changed to:', movementType);
-
-        // Reset holder selection
-        holderField.val('');
-
-        if (movementType === 'complete') {
-            // Hide holder selection for completion
-            holderSelection.hide();
-            submitBtn.html('<i class="fas fa-check-circle"></i> Complete Case');
-            submitBtn.removeClass('btn-primary').addClass('btn-success');
-        } else if (movementType === 'forward') {
-            holderSelection.show();
-            helpText.text('Select the next stage holder to move the case forward.');
-            submitBtn.html('<i class="fas fa-arrow-up"></i> Move Forward');
-            submitBtn.removeClass('btn-success').addClass('btn-primary');
-        } else if (movementType === 'backward') {
-            holderSelection.show();
-            helpText.text('Select the previous stage holder to move the case backward.');
-            submitBtn.html('<i class="fas fa-arrow-down"></i> Move Backward');
-            submitBtn.removeClass('btn-success').addClass('btn-primary');
-        } else if (movementType === 'reassign') {
-            holderSelection.show();
-            helpText.text('Select another holder in the same stage to reassign the case.');
-            submitBtn.html('<i class="fas fa-exchange-alt"></i> Reassign Case');
-            submitBtn.removeClass('btn-success').addClass('btn-primary');
+        if (movementType === 'forward' || movementType === 'backward' || movementType === 'reassign') {
+            toHolderGroup.show();
+            fetchAvailableHolders(movementType);
         } else {
-            holderSelection.hide();
-            submitBtn.html('<i class="fas fa-arrow-right"></i> Confirm Movement');
-            submitBtn.removeClass('btn-success').addClass('btn-primary');
-        }
-
-        // Check if holder field has options
-        if (holderSelection.is(':visible') && holderField.find('option').length <= 1) {
-            submitBtn.prop('disabled', true);
-            helpText.addClass('text-danger').text('No available holders for this movement type.');
-        } else {
+            toHolderGroup.hide();
+            toHolderSelect.empty(); // Clear options when hidden
             submitBtn.prop('disabled', false);
-            helpText.removeClass('text-danger');
         }
-    });
+    }
 
-    // Trigger change event on page load to set initial state
-    $('#id_movement_type').trigger('change');
+    function fetchAvailableHolders(movementType) {
+        // Show a loading state
+        toHolderSelect.html('<option value="">Loading...</option>').prop('disabled', true);
+        submitBtn.prop('disabled', true);
 
-    // Form validation
-    $('#moveCaseForm').on('submit', function(e) {
-        var movementType = $('#id_movement_type').val();
-        var toHolder = $('#id_to_holder').val();
-        var comments = $('#id_comments').val().trim();
-
-        if (!comments) {
-            e.preventDefault();
-            alert('Please provide comments for this movement.');
-            $('#id_comments').focus();
-            return false;
-        }
-
-        if (movementType !== 'complete' && $('#holder-selection').is(':visible') && !toHolder) {
-            e.preventDefault();
-            alert('Please select a holder for this movement.');
-            $('#id_to_holder').focus();
-            return false;
-        }
-
-        // Confirmation for completion
-        if (movementType === 'complete') {
-            if (!confirm('Are you sure you want to mark this case as completed? This action should only be done when the case is fully resolved.')) {
-                e.preventDefault();
-                return false;
+        $.ajax({
+            url: getHoldersUrl,
+            data: {
+                'case_id': caseId,
+                'movement_type': movementType
+            },
+            success: function(response) {
+                toHolderSelect.empty(); // Clear existing options
+                if (response.success && response.holders.length > 0) {
+                    // Add the default placeholder option
+                    toHolderSelect.append($('<option>', {
+                        value: '',
+                        text: '-- Select a holder --'
+                    }));
+                    // Populate with new options from the server
+                    $.each(response.holders, function(i, holder) {
+                        toHolderSelect.append($('<option>', {
+                            value: holder.id,
+                            text: holder.name
+                        }));
+                    });
+                    toHolderSelect.prop('disabled', false);
+                    submitBtn.prop('disabled', false);
+                } else {
+                    // If no holders are available, show a message
+                    toHolderSelect.html('<option value="">No holders available for this action</option>').prop('disabled', true);
+                }
+            },
+            error: function() {
+                toHolderSelect.html('<option value="">Error loading holders</option>').prop('disabled', true);
             }
-        }
+        });
+    }
 
-        // Show loading state
-        submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-    });
+    // Bind the event listener
+    movementTypeSelect.on('change', updateHolderVisibility);
+
+    // Trigger the function on page load to set the initial state
+    updateHolderVisibility();
 });
 </script>
-
 {% endblock %}

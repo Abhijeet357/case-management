@@ -78,14 +78,21 @@ class UserProfile(models.Model):
     ]
     
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     phone = models.CharField(max_length=15, blank=True)
     department = models.CharField(max_length=100, blank=True)
     is_active_holder = models.BooleanField(default=True)
-    
+
+    # NEW: Added a boolean field to grant Record Keeper permissions.
+    is_record_keeper = models.BooleanField(
+        default=False,
+        help_text="Designates this user as responsible for handing over and receiving physical records."
+    )
+
     def __str__(self):
         return f"{self.user.username} ({self.get_role_display()})"
     
+      
     def get_dashboard_cases(self):
         """Get cases for dashboard based on role hierarchy"""
         return get_dashboard_cases_query(self)
@@ -650,7 +657,8 @@ class CaseMilestone(models.Model):
     milestone_order = models.IntegerField(default=0)
 
     # Role that should complete this milestone
-    responsible_role = models.CharField(max_length=10, choices=UserProfile.ROLE_CHOICES)
+    # FIX: Increased max_length from 10 to 20 to accommodate 'RECORD_KEEPER'
+    responsible_role = models.CharField(max_length=20, choices=UserProfile.ROLE_CHOICES)
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -661,7 +669,6 @@ class CaseMilestone(models.Model):
 
     def __str__(self):
         return f"{self.case_type.name} - {self.milestone_name}"
-
 
 class CaseMilestoneProgress(models.Model):
     """Track progress of milestones for each case"""
@@ -826,3 +833,146 @@ def enhanced_save(self, *args, **kwargs):
     if not hasattr(self, '_milestones_initialized'):
         self.initialize_milestones()
         self._milestones_initialized = True
+class Location(models.Model):
+    """
+    Represents a physical location where a record can be stored.
+    This can be a record room, an external office, or a user's desk.
+    """
+    LOCATION_TYPE_CHOICES = [
+        ('RECORD_ROOM', 'Record Room'),
+        ('EXTERNAL_OFFICE', 'External Office'),
+        ('USER_DESK', 'User Desk'),
+    ]
+
+    name = models.CharField(max_length=200, unique=True, help_text="A unique name for the location (e.g., 'CTO Record Room', 'AAO John Doe's Desk').")
+    location_type = models.CharField(max_length=20, choices=LOCATION_TYPE_CHOICES, help_text="The category of the location.")
+    custodian = models.ForeignKey(UserProfile, on_delete=models.SET_NULL, null=True, blank=True, help_text="The user responsible for this location (e.g., the record keeper for a room).")
+    address = models.TextField(blank=True, help_text="Physical address or description of the location.")
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Record Location"
+        verbose_name_plural = "Record Locations"
+
+    def __str__(self):
+        return self.name
+
+class Record(models.Model):
+    """
+    Represents a single physical record, such as a Service Book or Pension File.
+    """
+    RECORD_TYPE_CHOICES = [
+        ('SERVICE_BOOK', 'Service Book'),
+        ('PENSION_FILE', 'Pension File'),
+    ]
+
+    RECORD_STATUS_CHOICES = [
+        ('AVAILABLE', 'Available'),
+        ('IN_USE', 'In Use'),
+        ('REQUISITIONED', 'Requisitioned'),
+        ('MISSING', 'Missing'),
+        ('NOT_APPLICABLE', 'Not Applicable'), # For cases where a record does not exist
+    ]
+
+    record_type = models.CharField(max_length=20, choices=RECORD_TYPE_CHOICES, help_text="The type of the record.")
+    pensioner = models.ForeignKey(PPOMaster, on_delete=models.CASCADE, related_name='records', help_text="The pensioner this record belongs to.")
+    status = models.CharField(max_length=20, choices=RECORD_STATUS_CHOICES, default='AVAILABLE', help_text="The current status of the record.")
+    current_location = models.ForeignKey(Location, on_delete=models.PROTECT, help_text="The current physical location of the record.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        # Ensures a pensioner can only have one of each type of record
+        unique_together = ('record_type', 'pensioner')
+        ordering = ['pensioner__employee_name', 'record_type']
+        verbose_name = "Physical Record"
+        verbose_name_plural = "Physical Records"
+
+    def __str__(self):
+        return f"{self.get_record_type_display()} for {self.pensioner.employee_name}"
+
+class RecordRequisition(models.Model):
+    """
+    Tracks the entire lifecycle of a request for one or more records.
+    """
+    REQUISITION_STATUS_CHOICES = [
+        ('PENDING_APPROVAL', 'Pending AAO Approval'),
+        ('REJECTED', 'Rejected'),
+        ('APPROVED', 'Approved (Pending Handover)'),
+        ('IN_TRANSIT', 'In Transit'),
+        ('IN_USE', 'In Use (Handed Over)'),
+        ('RETURN_REQUESTED', 'Return Requested'),
+        ('RETURN_APPROVED', 'Return Approved'),
+        ('RETURNED', 'Returned (Closed)'),
+        ('RETURN_REJECTED', 'Return Rejected'),
+    ]
+
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='requisitions', help_text="The case that this requisition is for.")
+    records_requested = models.ManyToManyField(Record, help_text="The specific records being requested.")
+    status = models.CharField(max_length=20, choices=REQUISITION_STATUS_CHOICES, default='PENDING_APPROVAL')
+    is_return_request = models.BooleanField(default=False, help_text="Check this if this is a request to return records.")
+
+    # Workflow Roles
+    requester_dh = models.ForeignKey(UserProfile, related_name='made_requisitions', on_delete=models.PROTECT, help_text="The Dealing Hand who initiated the request.")
+    approving_aao = models.ForeignKey(UserProfile, related_name='approved_requisitions', on_delete=models.PROTECT, help_text="The AAO responsible for approving this request.")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Record Requisition"
+        verbose_name_plural = "Record Requisitions"
+
+    def __str__(self):
+        return f"Requisition for Case {self.case.case_id} ({self.get_status_display()})"
+
+
+class RecordMovement(models.Model):
+    """
+    Serves as a permanent audit log for every completed handover of a record.
+    """
+    requisition = models.ForeignKey(RecordRequisition, on_delete=models.CASCADE, related_name='movements', help_text="The requisition that authorized this movement.", null=True, blank=True)
+    record = models.ForeignKey(Record, on_delete=models.CASCADE, related_name='movements', help_text="The specific record that was moved.")
+    from_location = models.ForeignKey(Location, related_name='moves_from', on_delete=models.PROTECT, help_text="The location the record came from.")
+    to_location = models.ForeignKey(Location, related_name='moves_to', on_delete=models.PROTECT, help_text="The location the record went to.")
+    timestamp = models.DateTimeField(default=timezone.now, help_text="The exact date and time of the handover.")
+    acknowledged_by = models.ForeignKey(UserProfile, on_delete=models.PROTECT, help_text="The user who received the record and acknowledged the handover.")
+    comments = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Record Movement Log"
+        verbose_name_plural = "Record Movement Logs"
+
+    def __str__(self):
+        return f"Moved {self.record} to {self.to_location} on {self.timestamp.strftime('%Y-%m-%d')}"
+
+class CaseTypeTrigger(models.Model):
+    """
+    Allows an administrator to configure automatic record requisitions
+    based on case events.
+    """
+    TRIGGER_EVENT_CHOICES = [
+        ('ON_CASE_CREATION', 'On Case Creation'),
+        ('ON_CASE_COMPLETION', 'On Case Completion'),
+    ]
+
+    RECORD_CHOICES = [
+        ('SERVICE_BOOK', 'Service Book'),
+        ('PENSION_FILE', 'Pension File'),
+    ]
+
+    case_type = models.ForeignKey(CaseType, on_delete=models.CASCADE, related_name='record_triggers')
+    trigger_event = models.CharField(max_length=25, choices=TRIGGER_EVENT_CHOICES, help_text="The event that will fire this trigger.")
+    records_to_request = models.CharField(max_length=20, choices=RECORD_CHOICES)
+
+    class Meta:
+        unique_together = ('case_type', 'trigger_event', 'records_to_request')
+        verbose_name = "Case Type Record Trigger"
+        verbose_name_plural = "Case Type Record Triggers"
+
+    def __str__(self):
+        return f"Trigger for {self.case_type.name}: {self.get_trigger_event_display()}"

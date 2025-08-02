@@ -14,7 +14,7 @@ from django.contrib import messages
 from .models import (
     UserProfile, PPOMaster, CaseType, Case, CaseMovement, RetiringEmployee, FamilyMember,
     # New enhanced models
-    DynamicFormField, CaseMilestone, CaseMilestoneProgress, CaseFieldData
+    DynamicFormField, CaseMilestone, CaseMilestoneProgress, CaseFieldData,Location, Record, RecordRequisition, RecordMovement, CaseTypeTrigger
 )
 from django.contrib.auth.models import User
 
@@ -516,3 +516,161 @@ class FamilyMemberAdmin(admin.ModelAdmin):
 admin.site.site_header = "Case Management System - Enhanced"
 admin.site.site_title = "Case Management Admin"
 admin.site.index_title = "Welcome to Case Management System"
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing physical record locations.
+    """
+    list_display = ('name', 'location_type', 'custodian')
+    list_filter = ('location_type',)
+    search_fields = ('name', 'custodian__user__username')
+    ordering = ('name',)
+
+@admin.register(Record)
+class RecordAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing individual physical records.
+    Allows for easy viewing and updating of record status and location.
+    """
+    list_display = ('pensioner', 'record_type', 'status', 'current_location')
+    list_filter = ('record_type', 'status', 'current_location__name')
+    search_fields = ('pensioner__employee_name', 'pensioner__ppo_number')
+    autocomplete_fields = ('pensioner', 'current_location') # Makes selecting pensioner/location easier
+    ordering = ('pensioner__employee_name',)
+
+    fieldsets = (
+        (None, {
+            'fields': ('pensioner', 'record_type', 'status')
+        }),
+        ('Location Information', {
+            'fields': ('current_location',)
+        }),
+    )
+
+@admin.register(RecordRequisition)
+class RecordRequisitionAdmin(admin.ModelAdmin):
+    """
+    Admin interface for viewing and managing record requisitions.
+    Primarily for tracking and auditing purposes.
+    """
+    list_display = ('case', 'requester_dh', 'approving_aao', 'status', 'created_at')
+    list_filter = ('status', 'is_return_request')
+    search_fields = ('case__case_id', 'requester_dh__user__username')
+    autocomplete_fields = ('case', 'records_requested', 'requester_dh', 'approving_aao')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+
+@admin.register(RecordMovement)
+class RecordMovementAdmin(admin.ModelAdmin):
+    """
+    Admin interface for the audit log of all record movements.
+    This view is read-only as movements should only be created by the application logic.
+    """
+    list_display = ('record', 'from_location', 'to_location', 'acknowledged_by', 'timestamp')
+    list_filter = ('from_location', 'to_location')
+    search_fields = ('record__pensioner__employee_name',)
+    date_hierarchy = 'timestamp'
+    ordering = ('-timestamp',)
+
+    # Make the admin view read-only
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
+    
+if admin.site.is_registered(CaseType):
+    admin.site.unregister(CaseType)
+
+class CaseTypeTriggerInline(admin.TabularInline):
+    """
+    This allows an admin to manage triggers directly from the CaseType page.
+    It's a more intuitive user experience.
+    """
+    model = CaseTypeTrigger
+    extra = 1 # Show one empty form for adding a new trigger.
+    verbose_name = "Automated Record Trigger"
+    verbose_name_plural = "Automated Record Triggers"
+
+    # ==============================================================================
+# == ENHANCEMENTS TO EXISTING ADMIN MODELS
+# ==============================================================================
+
+# Unregister the existing UserProfile admin if it exists, to re-register it with enhancements
+# This avoids errors if you run this script multiple times.
+# Note: You might need to import the original admin class if it's in a different file.
+# For now, we assume it's simple and can be re-registered directly.
+
+# Clear existing registrations to avoid conflicts if you re-run this
+# This is a robust way to handle updates in a development environment
+if admin.site.is_registered(UserProfile):
+    admin.site.unregister(UserProfile)
+if admin.site.is_registered(Case):
+    admin.site.unregister(Case)
+if admin.site.is_registered(CaseType):
+    admin.site.unregister(CaseType)
+
+
+class RecordRequisitionInline(admin.TabularInline):
+    """
+    Inline view to show record requisitions directly on the Case admin page.
+    """
+    model = RecordRequisition
+    extra = 0 # Don't show empty forms for new requisitions
+    readonly_fields = ('requester_dh', 'approving_aao', 'status', 'created_at')
+    fields = ('requester_dh', 'approving_aao', 'status', 'created_at')
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False # Requisitions should be created from the app, not admin
+
+@admin.register(Case)
+class CaseAdmin(ImportExportMixin, admin.ModelAdmin):
+    """
+    Enhanced Case admin to show related record requisitions.
+    """
+    # Assuming your existing CaseAdmin configuration is similar to this
+    list_display = ('case_id', 'case_type', 'current_status', 'priority', 'is_completed', 'current_holder')
+    list_filter = ('priority', 'is_completed', 'case_type', 'current_holder__role')
+    search_fields = ('case_id', 'applicant_name', 'case_title')
+    inlines = [RecordRequisitionInline] # Add the inline here
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    """
+    Admin for User Profiles.
+    """
+    list_display = ('user', 'role', 'is_active_holder')
+    list_filter = ('role', 'is_active_holder')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name')
+
+class CaseTypeTriggerInline(admin.TabularInline):
+    """
+    Allows managing triggers directly from the CaseType admin page.
+    """
+    model = CaseTypeTrigger
+    extra = 1
+
+@admin.register(CaseType)
+class CaseTypeAdmin(ImportExportMixin, admin.ModelAdmin):
+    """
+    Enhanced CaseType admin to manage triggers inline.
+    """
+    list_display = ('name', 'workflow_type', 'priority', 'is_active')
+    list_filter = ('workflow_type', 'priority', 'is_active')
+    
+    # Add the inline here. Now, when you edit a CaseType, you'll see a section
+    # at the bottom to manage its triggers.
+    inlines = [CaseTypeTriggerInline]
+
+# Re-register other models if they were unregistered
+# This ensures all your original admin views are still present
+if not admin.site.is_registered(PPOMaster):
+    admin.site.register(PPOMaster)
+if not admin.site.is_registered(CaseMovement):
+    admin.site.register(CaseMovement)

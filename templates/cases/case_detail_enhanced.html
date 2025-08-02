@@ -1,638 +1,115 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Case {{ case.case_id }} - Enhanced View{% endblock %}
+{% block title %}Enhanced Case Details: {{ case.case_id }}{% endblock %}
 
 {% block extra_css %}
 <style>
     .milestone-timeline {
         position: relative;
-        padding-left: 30px;
+        padding-left: 20px;
+        border-left: 2px solid #e9ecef;
     }
-
-    .milestone-timeline::before {
+    .milestone-item {
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .milestone-item::before {
         content: '';
         position: absolute;
-        left: 15px;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        background: #dee2e6;
-    }
-
-    .milestone-item {
-        position: relative;
-        margin-bottom: 20px;
-        background: white;
-        border-radius: 8px;
-        padding: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .milestone-status-indicator {
-        position: absolute;
-        left: -22px;
-        top: 20px;
-        width: 16px;
-        height: 16px;
+        left: -27px;
+        top: 5px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
-        border: 3px solid white;
-        box-shadow: 0 0 0 1px #dee2e6;
+        background-color: #007bff;
+        border: 2px solid white;
     }
-
-    .milestone-status-indicator.completed {
-        background: #28a745;
-    }
-
-    .milestone-status-indicator.in_progress {
-        background: #ffc107;
-    }
-
-    .milestone-status-indicator.pending {
-        background: #6c757d;
-    }
-
-    .milestone-status-indicator.blocked {
-        background: #dc3545;
-    }
-
-    .dynamic-field-display {
-        background: #f8f9fa;
-        border-radius: 6px;
-        padding: 10px;
-        margin-bottom: 10px;
-        border-left: 3px solid #007bff;
-    }
-
-    .field-label {
-        font-weight: bold;
-        color: #495057;
-        margin-bottom: 5px;
-    }
-
-    .field-value {
-        color: #6c757d;
-    }
-
-    .case-actions {
-        position: sticky;
-        top: 20px;
-        background: white;
-        border-radius: 8px;
-        padding: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .movement-history {
-        max-height: 400px;
-        overflow-y: auto;
-    }
-
-    .movement-item {
-        border-bottom: 1px solid #eee;
-        padding: 10px 0;
-    }
-
-    .movement-item:last-child {
-        border-bottom: none;
-    }
-
-    .status-badge {
-        font-size: 0.8em;
-        padding: 4px 8px;
-    }
-
-    .progress-bar-container {
-        background: #e9ecef;
-        height: 10px;
-        border-radius: 5px;
-        overflow: hidden;
-        margin: 10px 0;
-    }
-
-    .progress-bar {
-        height: 100%;
-        background: linear-gradient(90deg, #28a745, #20c997);
-        transition: width 0.3s ease;
-    }
+    .milestone-item.completed::before { background-color: #28a745; }
+    .milestone-item.in_progress::before { background-color: #ffc107; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2>Case {{ case.case_id }}</h2>
-                    <p class="text-muted mb-0">{{ case.case_type.name }} - {{ case.sub_category }}</p>
-                </div>
-                <div>
-                    <span class="badge badge-{% if case.priority == 'High' %}danger{% elif case.priority == 'Medium' %}warning{% else %}success{% endif %} mr-2">
-                        {{ case.priority }} Priority
-                    </span>
-                    {% if case.is_completed %}
-                        <span class="badge badge-success">Completed</span>
-                    {% else %}
-                        <span class="badge badge-warning">In Progress</span>
-                    {% endif %}
-                </div>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Enhanced Case Details</h2>
+        <a href="{% url 'case_list' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Case List
+        </a>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ case.case_id }} - {{ case.case_title }}</h4>
+            <span class="badge bg-primary p-2">{{ case.current_holder.role }}</span>
+        </div>
+        <div class="card-body">
+            <p><strong>Applicant:</strong> {{ case.applicant_name }}</p>
+            <p><strong>Status:</strong> {{ case.current_status }}</p>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Case Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap">
+                {% if can_edit %}
+                    <a href="{% url 'move_case' case.case_id %}" class="btn btn-primary">
+                        <i class="fas fa-arrow-right"></i> Move Case
+                    </a>
+                {% endif %}
+                {% if request.user.userprofile.role == 'DH' %}
+                    <a href="{% url 'request_record' case.case_id %}" class="btn btn-success">
+                        <i class="fas fa-file-import"></i> Request Records
+                    </a>
+                    <a href="{% url 'return_record' case.case_id %}" class="btn btn-info">
+                        <i class="fas fa-file-export"></i> Return Records
+                    </a>
+                {% endif %}
             </div>
         </div>
     </div>
 
     <div class="row">
-        <!-- Main Content -->
         <div class="col-md-8">
-            <!-- Case Information -->
-            <div class="card mb-4">
+            <div class="card shadow-sm">
                 <div class="card-header">
-                    <h5 class="mb-0">Case Information</h5>
+                    <h5 class="mb-0">Milestone Progress</h5>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Case Title:</strong> {{ case.case_title }}</p>
-                            <p><strong>Applicant Name:</strong> {{ case.applicant_name }}</p>
-                            <p><strong>Registration Date:</strong> {{ case.registration_date|date:"d M Y" }}</p>
-                            <p><strong>Current Holder:</strong> {{ case.current_holder.user.get_full_name|default:case.current_holder.user.username }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Current Status:</strong> {{ case.current_status }}</p>
-                            <p><strong>Days in Current Stage:</strong> {{ case.days_in_current_stage }}</p>
-                            <p><strong>Total Days Pending:</strong> {{ case.total_days_pending }}</p>
-                            {% if case.expected_completion %}
-                                <p><strong>Expected Completion:</strong> {{ case.expected_completion|date:"d M Y" }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    {% if case.case_description %}
-                        <div class="mt-3">
-                            <strong>Description:</strong>
-                            <p class="text-muted">{{ case.case_description }}</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Dynamic Fields Display -->
-            {% if dynamic_data %}
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="mb-0">Case Specific Information</h5>
-                    </div>
-                    <div class="card-body">
-                        {% for field_name, field_data in dynamic_data.items %}
-                            <div class="dynamic-field-display">
-                                <div class="field-label">{{ field_data.label|default:field_name }}</div>
-                                <div class="field-value">
-                                    {% if field_data.type == 'file' and field_data.value %}
-                                        <a href="{{ field_data.value.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-download"></i> Download File
-                                        </a>
-                                    {% elif field_data.type == 'date' and field_data.value %}
-                                        {{ field_data.value|date:"d M Y" }}
-                                    {% else %}
-                                        {{ field_data.value|default:"Not specified" }}
-                                    {% endif %}
-                                </div>
+                    <div class="milestone-timeline">
+                        {% for progress in milestone_progress %}
+                            <div class="milestone-item {{ progress.status }}">
+                                <h6>{{ progress.milestone.milestone_name }}</h6>
+                                <p class="text-muted mb-1">{{ progress.milestone.milestone_description }}</p>
+                                <span class="badge bg-{% if progress.status == 'completed' %}success{% elif progress.status == 'in_progress' %}warning{% else %}secondary{% endif %}">
+                                    {{ progress.get_status_display }}
+                                </span>
                             </div>
+                        {% empty %}
+                            <p>No milestones defined for this case type.</p>
                         {% endfor %}
                     </div>
                 </div>
-            {% endif %}
-
-            <!-- Milestone Progress -->
-            {% if milestone_progress %}
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Milestone Progress</h5>
-                        <div class="progress-bar-container" style="width: 200px;">
-                            <div class="progress-bar" style="width: {{ milestone_progress.progress_percentage }}%"></div>
-                        </div>
-                        <span class="text-muted">{{ milestone_progress.completed_count }}/{{ milestone_progress.total_count }} Complete</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="milestone-timeline">
-                            {% for milestone in milestone_progress.milestones %}
-                                <div class="milestone-item">
-                                    <div class="milestone-status-indicator {{ milestone.status }}"></div>
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div>
-                                            <h6 class="mb-1">{{ milestone.milestone.name }}</h6>
-                                            <p class="text-muted mb-2">{{ milestone.milestone.description }}</p>
-                                            <div class="d-flex align-items-center">
-                                                <span class="status-badge badge badge-{% if milestone.status == 'completed' %}success{% elif milestone.status == 'in_progress' %}warning{% elif milestone.status == 'blocked' %}danger{% else %}secondary{% endif %}">
-                                                    {{ milestone.get_status_display }}
-                                                </span>
-                                                {% if milestone.assigned_to %}
-                                                    <span class="ml-2 text-muted">
-                                                        <i class="fas fa-user"></i> {{ milestone.assigned_to.user.get_full_name|default:milestone.assigned_to.user.username }}
-                                                    </span>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                        <div class="text-right">
-                                            {% if milestone.expected_completion_date %}
-                                                <small class="text-muted">
-                                                    Due: {{ milestone.expected_completion_date|date:"d M Y" }}
-                                                </small>
-                                            {% endif %}
-                                            {% if milestone.status == 'pending' and milestone.assigned_to == request.user.userprofile %}
-                                                <br>
-                                                <button class="btn btn-sm btn-primary mt-1" onclick="updateMilestone({{ milestone.id }}, 'start')">
-                                                    Start
-                                                </button>
-                                            {% elif milestone.status == 'in_progress' and milestone.assigned_to == request.user.userprofile %}
-                                                <br>
-                                                <button class="btn btn-sm btn-success mt-1" onclick="updateMilestone({{ milestone.id }}, 'complete')">
-                                                    Complete
-                                                </button>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    {% if milestone.notes %}
-                                        <div class="mt-2">
-                                            <small class="text-muted">
-                                                <strong>Notes:</strong> {{ milestone.notes }}
-                                            </small>
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            {% endif %}
-
-            <!-- Movement History -->
-            <div class="card">
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0">Movement History</h5>
                 </div>
-                <div class="card-body movement-history">
-                    {% if movements %}
-                        {% for movement in movements %}
-                            <div class="movement-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <strong>{{ movement.action }}</strong>
-                                        <br>
-                                        <span class="text-muted">
-                                            From: {{ movement.from_stage }} 
-                                            {% if movement.to_stage != movement.from_stage %}
-                                                → To: {{ movement.to_stage }}
-                                            {% endif %}
-                                        </span>
-                                        {% if movement.comments %}
-                                            <br>
-                                            <small class="text-muted">{{ movement.comments }}</small>
-                                        {% endif %}
-                                    </div>
-                                    <div class="text-right">
-                                        <small class="text-muted">
-                                            {{ movement.movement_date|date:"d M Y H:i" }}
-                                            <br>
-                                            by {{ movement.updated_by.get_full_name|default:movement.updated_by.username }}
-                                        </small>
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-muted">No movement history available.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidebar -->
-        <div class="col-md-4">
-            <!-- Case Actions -->
-            {% if can_edit %}
-                <div class="case-actions mb-4">
-                    <h6>Case Actions</h6>
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'move_case' case.case_id %}?type=forward" class="btn btn-primary btn-sm">
-                            <i class="fas fa-arrow-right"></i> Move Forward
-                        </a>
-                        <a href="{% url 'move_case' case.case_id %}?type=backward" class="btn btn-secondary btn-sm">
-                            <i class="fas fa-arrow-left"></i> Move Backward
-                        </a>
-                        <a href="{% url 'move_case' case.case_id %}?type=reassign" class="btn btn-info btn-sm">
-                            <i class="fas fa-user-friends"></i> Reassign
-                        </a>
-                        {% if not case.is_completed %}
-                            <a href="{% url 'move_case' case.case_id %}?type=complete" class="btn btn-success btn-sm">
-                                <i class="fas fa-check"></i> Mark Complete
-                            </a>
-                        {% endif %}
-                    </div>
-                </div>
-            {% endif %}
-
-            <!-- PPO Information -->
-            {% if case.ppo_master %}
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h6 class="mb-0">PPO Information</h6>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>PPO Number:</strong> {{ case.ppo_master.ppo_number }}</p>
-                        <p><strong>Employee Name:</strong> {{ case.ppo_master.employee_name }}</p>
-                        {% if case.ppo_master.date_of_retirement %}
-                            <p><strong>Retirement Date:</strong> {{ case.ppo_master.date_of_retirement|date:"d M Y" }}</p>
-                        {% endif %}
-                        {% if case.ppo_master.mobile_number %}
-                            <p><strong>Mobile:</strong> {{ case.ppo_master.mobile_number }}</p>
-                        {% endif %}
-                        {% if case.ppo_master.pension_type %}
-                            <p><strong>Pension Type:</strong> {{ case.ppo_master.pension_type }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-            {% endif %}
-
-            <!-- Case Statistics -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h6 class="mb-0">Case Statistics</h6>
-                </div>
                 <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-6">
-                            <h4 class="text-primary">{{ case.days_in_current_stage }}</h4>
-                            <small class="text-muted">Days in Current Stage</small>
-                        </div>
-                        <div class="col-6">
-                            <h4 class="text-warning">{{ case.total_days_pending }}</h4>
-                            <small class="text-muted">Total Days Pending</small>
-                        </div>
-                    </div>
-                    
-                    {% if case.expected_completion %}
-                        <hr>
-                        <div class="text-center">
-                            {% now "Y-m-d" as today %}
-                            {% if case.expected_completion|date:"Y-m-d" < today and not case.is_completed %}
-                                <div class="text-danger">
-                                    <i class="fas fa-exclamation-triangle"></i>
-                                    <strong>Overdue by {{ case.expected_completion|timesince }}</strong>
-                                </div>
-                            {% elif not case.is_completed %}
-                                <div class="text-success">
-                                    <i class="fas fa-clock"></i>
-                                    <strong>{{ case.expected_completion|timeuntil }} remaining</strong>
-                                </div>
-                            {% endif %}
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Related Cases -->
-            {% if case.ppo_master %}
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h6 class="mb-0">Related Cases</h6>
-                    </div>
-                    <div class="card-body">
-                        <div id="relatedCases">
-                            <p class="text-muted">Loading related cases...</p>
-                        </div>
-                    </div>
-                </div>
-            {% endif %}
-
-            <!-- Quick Links -->
-            <div class="card">
-                <div class="card-header">
-                    <h6 class="mb-0">Quick Links</h6>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'case_list' %}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-list"></i> All Cases
-                        </a>
-                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-tachometer-alt"></i> Dashboard
-                        </a>
-                        {% if milestone_progress %}
-                            <a href="{% url 'milestone_report' %}" class="btn btn-outline-info btn-sm">
-                                <i class="fas fa-chart-line"></i> Milestone Report
-                            </a>
-                        {% endif %}
-                        <button class="btn btn-outline-primary btn-sm" onclick="printCase()">
-                            <i class="fas fa-print"></i> Print Case
-                        </button>
-                    </div>
+                    {% for movement in movements %}
+                        <p><small><strong>{{ movement.action }}</strong> by {{ movement.updated_by.username }} on {{ movement.movement_date|date:"d/m/Y" }}</small></p>
+                    {% empty %}
+                        <p>No movements yet.</p>
+                    {% endfor %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<!-- Milestone Update Modal -->
-<div class="modal fade" id="milestoneModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Update Milestone</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <form id="milestoneForm">
-                    {% csrf_token %}
-                    <input type="hidden" id="milestoneId" name="milestone_id">
-                    <input type="hidden" id="milestoneAction" name="action">
-                    
-                    <div class="form-group">
-                        <label for="milestoneNotes">Notes (optional)</label>
-                        <textarea class="form-control" id="milestoneNotes" name="notes" rows="3" placeholder="Add any comments or notes..."></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitMilestoneUpdate()">Update</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-$(document).ready(function() {
-    // Load related cases if PPO master exists
-    {% if case.ppo_master %}
-        loadRelatedCases('{{ case.ppo_master.ppo_number }}', '{{ case.case_id }}');
-    {% endif %}
-});
-
-function updateMilestone(milestoneId, action) {
-    $('#milestoneId').val(milestoneId);
-    $('#milestoneAction').val(action);
-    $('#milestoneModal').modal('show');
-}
-
-function submitMilestoneUpdate() {
-    const formData = new FormData($('#milestoneForm')[0]);
-    const milestoneId = $('#milestoneId').val();
-    
-    $.ajax({
-        url: `/cases/{{ case.case_id }}/milestone/${milestoneId}/update/`,
-        method: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        success: function(response) {
-            if (response.success) {
-                $('#milestoneModal').modal('hide');
-                showSuccessMessage(response.message);
-                // Reload the page to show updated milestone status
-                setTimeout(() => {
-                    location.reload();
-                }, 1000);
-            } else {
-                showErrorMessage(response.error);
-            }
-        },
-        error: function() {
-            showErrorMessage('Error updating milestone');
-        }
-    });
-}
-
-function loadRelatedCases(ppoNumber, currentCaseId) {
-    $.ajax({
-        url: '/api/related-cases/',
-        method: 'GET',
-        data: { 
-            ppo_number: ppoNumber,
-            exclude_case_id: currentCaseId
-        },
-        success: function(response) {
-            if (response.success && response.cases.length > 0) {
-                let html = '';
-                response.cases.forEach(function(relatedCase) {
-                    const statusClass = relatedCase.is_completed ? 'success' : 'warning';
-                    const statusText = relatedCase.is_completed ? 'Completed' : 'Pending';
-                    
-                    html += `
-                        <div class="mb-2 pb-2 border-bottom">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <a href="/cases/${relatedCase.case_id}/" class="text-decoration-none">
-                                        <strong>${relatedCase.case_id}</strong>
-                                    </a>
-                                    <br>
-                                    <small class="text-muted">${relatedCase.case_type}</small>
-                                </div>
-                                <span class="badge badge-${statusClass}">${statusText}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                $('#relatedCases').html(html);
-            } else {
-                $('#relatedCases').html('<p class="text-muted">No related cases found.</p>');
-            }
-        },
-        error: function() {
-            $('#relatedCases').html('<p class="text-muted">Unable to load related cases.</p>');
-        }
-    });
-}
-
-function printCase() {
-    // Create a print-friendly version
-    const printWindow = window.open('', '_blank');
-    const printContent = `
-        <html>
-        <head>
-            <title>Case ${case.case_id} - Print View</title>
-            <style>
-                body { font-family: Arial, sans-serif; font-size: 12px; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .section { margin-bottom: 15px; }
-                .section h6 { margin-bottom: 10px; font-weight: bold; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h2>Case Details - {{ case.case_id }}</h2>
-                <p>Generated on: ${new Date().toLocaleDateString()}</p>
-            </div>
-            
-            <div class="section">
-                <h6>Basic Information</h6>
-                <table>
-                    <tr><th>Case ID</th><td>{{ case.case_id }}</td></tr>
-                    <tr><th>Case Type</th><td>{{ case.case_type.name }}</td></tr>
-                    <tr><th>Sub Category</th><td>{{ case.sub_category }}</td></tr>
-                    <tr><th>Applicant Name</th><td>{{ case.applicant_name }}</td></tr>
-                    <tr><th>Priority</th><td>{{ case.priority }}</td></tr>
-                    <tr><th>Current Status</th><td>{{ case.current_status }}</td></tr>
-                    <tr><th>Registration Date</th><td>{{ case.registration_date|date:"d M Y" }}</td></tr>
-                </table>
-            </div>
-            
-            {% if case.ppo_master %}
-            <div class="section">
-                <h6>PPO Information</h6>
-                <table>
-                    <tr><th>PPO Number</th><td>{{ case.ppo_master.ppo_number }}</td></tr>
-                    <tr><th>Employee Name</th><td>{{ case.ppo_master.employee_name }}</td></tr>
-                </table>
-            </div>
-            {% endif %}
-        </body>
-        </html>
-    `;
-    
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
-}
-
-function showSuccessMessage(message) {
-    const alert = $(`
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="close" data-dismiss="alert">
-                <span>&times;</span>
-            </button>
-        </div>
-    `);
-    
-    $('.container-fluid').prepend(alert);
-    
-    setTimeout(() => {
-        alert.fadeOut();
-    }, 3000);
-}
-
-function showErrorMessage(message) {
-    const alert = $(`
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="close" data-dismiss="alert">
-                <span>&times;</span>
-            </button>
-        </div>
-    `);
-    
-    $('.container-fluid').prepend(alert);
-    
-    setTimeout(() => {
-        alert.fadeOut();
-    }, 5000);
-}
-</script>
 {% endblock %}

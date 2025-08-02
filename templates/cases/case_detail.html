@@ -1,92 +1,85 @@
-<!-- Updated templates/cases/case_detail.html with fixed syntax (removed any extra endif, ensured balanced tags) -->
-
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Case Details - {{ case.case_id }}{% endblock %}
+{% block title %}Case Details: {{ case.case_id }}{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Case Details: {{ case.case_id }}</h2>
-    
-    <div class="card mb-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Case Details: {{ case.case_id }}</h4>
+            <span class="badge 
+                {% if case.is_completed %}bg-success
+                {% elif case.expected_completion and case.expected_completion < now %}bg-danger
+                {% else %}bg-warning text-dark
+                {% endif %}">
+                {{ case.current_status }}
+            </span>
+        </div>
         <div class="card-body">
-            <p><strong>Title:</strong> {{ case.case_title }}</p>
-            <p><strong>Type:</strong> {{ case.case_type.name }}</p>
-            <p><strong>Sub-Category:</strong> {{ case.sub_category }}</p>
-            <p><strong>Description:</strong> {{ case.case_description }}</p>
-            <p><strong>Applicant:</strong> {{ case.applicant_name }}</p>
-            {% if case.ppo_master %}
-                <p><strong>PPO Number:</strong> {{ case.ppo_master.ppo_number }}</p>
-            {% endif %}
-            <p><strong>Priority:</strong> 
-                <span class="badge {% if case.priority == 'High' %}bg-danger{% elif case.priority == 'Medium' %}bg-warning{% else %}bg-success{% endif %}">
-                    {{ case.priority }}
-                </span>
-            </p>
-            <p><strong>Status:</strong> {{ case.current_status }}</p>
-            <p><strong>Current Holder:</strong> {{ case.current_holder.user.username }} ({{ case.current_holder.get_role_display }})</p>
-            <p><strong>Days in Current Stage:</strong> {{ case.days_in_current_stage }}</p>
-            <p><strong>Total Days Pending:</strong> {{ case.total_days_pending }}</p>
-            <p><strong>Expected Completion:</strong> {{ case.expected_completion|date:"Y-m-d" }}</p>
-            {% if case.actual_completion %}
-                <p><strong>Actual Completion:</strong> {{ case.actual_completion|date:"Y-m-d" }}</p>
-            {% endif %}
-            <p><strong>Created By:</strong> {{ case.created_by.username }}</p>
-            <p><strong>Last Updated By:</strong> {{ case.last_updated_by.username }} on {{ case.last_update_date|date:"Y-m-d H:i" }}</p>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Case Title:</strong> {{ case.case_title }}</p>
+                    <p><strong>Case Type:</strong> {{ case.case_type.name }}</p>
+                    <p><strong>Applicant Name:</strong> {{ case.applicant_name }}</p>
+                    <p><strong>Priority:</strong> {{ case.priority }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Current Holder:</strong> {{ case.current_holder.user.get_full_name|default:case.current_holder.user.username }} ({{ case.current_holder.role }})</p>
+                    <p><strong>Registration Date:</strong> {{ case.registration_date|date:"d M Y, H:i" }}</p>
+                    <p><strong>Expected Completion:</strong> {{ case.expected_completion|date:"d M Y" }}</p>
+                    {% if case.is_completed %}
+                        <p><strong>Actual Completion:</strong> {{ case.actual_completion|date:"d M Y" }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Case Actions</h5>
+                </div>
+                <div class="card-body d-flex gap-2 flex-wrap">
+                    {% if user_profile == case.current_holder or user_profile.role == 'ADMIN' %}
+                        <a href="{% url 'move_case' case.case_id %}" class="btn btn-primary">
+                            <i class="fas fa-arrow-right"></i> Move Case
+                        </a>
+                    {% endif %}
+                    {% if request.user.userprofile.role == 'DH' %}
+                        <a href="{% url 'request_record' case.case_id %}" class="btn btn-success">
+                            <i class="fas fa-file-import"></i> Request Records
+                        </a>
+                        <a href="{% url 'return_record' case.case_id %}" class="btn btn-info">
+                            <i class="fas fa-file-export"></i> Return Records
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5>Movement History</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for movement in movements %}
+                            <li class="list-group-item">
+                                <strong>{{ movement.action }}</strong> on {{ movement.movement_date|date:"d M Y" }} by {{ movement.updated_by.username }}.<br>
+                                <small class="text-muted">
+                                    Moved from {{ movement.from_holder.user.username|default:"System" }} ({{ movement.from_stage }}) to {{ movement.to_holder.user.username }} ({{ movement.to_stage }}).
+                                    {% if movement.comments %}
+                                        <br><em>Comments: {{ movement.comments }}</em>
+                                    {% endif %}
+                                </small>
+                            </li>
+                        {% empty %}
+                            <li class="list-group-item">No movement history found.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
-    
-    <h3>Workflow Progress</h3>
-    <ul class="list-group mb-4">
-        {% for stage in workflow %}
-            <li class="list-group-item {% if forloop.counter0 == current_stage_index %}list-group-item-primary{% endif %}">
-                {{ stage }}
-                {% if forloop.counter0 == current_stage_index %}(Current){% endif %}
-            </li>
-        {% endfor %}
-    </ul>
-    
-    <h3>Movement History</h3>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>From Stage</th>
-                <th>To Stage</th>
-                <th>Action</th>
-                <th>Comments</th>
-                <th>Days in Prev Stage</th>
-                <th>Updated By</th>
-                <th>To Holder</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for movement in movements %}
-            <tr>
-                <td>{{ movement.movement_date|date:"Y-m-d H:i" }}</td>
-                <td>{{ movement.from_stage }}</td>
-                <td>{{ movement.to_stage }}</td>
-                <td>{{ movement.action }}</td>
-                <td>{{ movement.comments }}</td>
-                <td>{{ movement.days_in_previous_stage }}</td>
-                <td>{{ movement.updated_by.username }}</td>
-                <td>{% if movement.to_holder %}{{ movement.to_holder.user.username }}{% else %}N/A{% endif %}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8">No movements yet.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    
-    {% if user_profile.role == 'ADMIN' or case.current_holder == user_profile %}
-        {% if not case.is_completed %}
-            <a href="{% url 'move_case' case.case_id %}?type=forward" class="btn btn-success">Move Forward</a>
-            {% if user_profile.role != 'DH' %}
-                <a href="{% url 'move_case' case.case_id %}?type=backward" class="btn btn-warning">Move Backward</a>
-                <a href="{% url 'move_case' case.case_id %}?type=complete" class="btn btn-primary">Complete</a>
-                <a href="{% url 'move_case' case.case_id %}?type=reassign" class="btn btn-secondary">Re-assign</a>
-            {% endif %}
-        {% endif %}
-    {% endif %}
 </div>
 {% endblock %}

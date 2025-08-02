@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit, Row, Column, Field
-from .models import Case, CaseType, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee, timezone
+from .models import Case, Location, CaseType, Record, RecordRequisition, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee, timezone
 from dateutil.relativedelta import relativedelta
 from datetime import date, timedelta
 
@@ -319,3 +319,143 @@ class BulkImportForm(forms.Form):
             'csv_file',
             Submit('submit', 'Import Cases', css_class='btn btn-warning')
         )
+class RecordRequisitionForm(forms.ModelForm):
+    """
+    A form for a Dealing Hand to request physical records for a specific case.
+    """
+    # This field will allow the user to select which records they need.
+    records_requested = forms.ModelMultipleChoiceField(
+        queryset=None, # The queryset is set dynamically in __init__
+        widget=forms.CheckboxSelectMultiple,
+        label="Select the records to be requisitioned",
+        required=True
+    )
+
+    # This field allows the DH to select which AAO should approve the request.
+    approving_aao = forms.ModelChoiceField(
+        queryset=UserProfile.objects.filter(role='AAO', is_active_holder=True),
+        label="Select Approving AAO",
+        required=True
+    )
+
+    class Meta:
+        model = RecordRequisition
+        # We only need these two fields from the model for the creation form.
+        # The other fields (case, requester_dh) will be set in the view.
+        fields = ['records_requested', 'approving_aao']
+
+    def __init__(self, *args, **kwargs):
+        # The 'case' object is passed from the view to the form
+        self.case = kwargs.pop('case', None)
+        super().__init__(*args, **kwargs)
+
+        if not self.case:
+            # If for some reason the case is not passed, do not proceed.
+            return
+
+        # Dynamically set the queryset for the 'records_requested' field.
+        # It should only show records that belong to the pensioner of the current case
+        # and are currently 'AVAILABLE'.
+        available_records = Record.objects.filter(
+            pensioner=self.case.ppo_master,
+            status='AVAILABLE'
+        )
+        self.fields['records_requested'].queryset = available_records
+
+        # Add Crispy Forms helper for better layout
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            'records_requested',
+            'approving_aao',
+            Submit('submit', 'Submit for Approval', css_class='btn btn-primary mt-3')
+        )
+
+    def clean(self):
+        """
+        Custom validation for the form.
+        """
+        cleaned_data = super().clean()
+        records = cleaned_data.get('records_requested')
+
+        # Ensure that the user has selected at least one record.
+        if not records:
+            raise forms.ValidationError(
+                "You must select at least one record to requisition."
+            )
+        return cleaned_data
+    
+class RecordReturnForm(forms.ModelForm):
+    """
+    A form for a Dealing Hand to initiate the return of records they currently hold.
+    """
+    # This field will allow the user to select which of their held records to return.
+    records_to_return = forms.ModelMultipleChoiceField(
+        queryset=None, # Dynamically set in __init__
+        widget=forms.CheckboxSelectMultiple,
+        label="Select the records you are returning",
+        required=True
+    )
+
+    # This field lets the DH select which AAO should approve the return.
+    approving_aao = forms.ModelChoiceField(
+        queryset=UserProfile.objects.filter(role='AAO', is_active_holder=True),
+        label="Select Approving AAO for the return",
+        required=True
+    )
+
+    class Meta:
+        model = RecordRequisition
+        # We rename 'records_requested' to 'records_to_return' for clarity in the form.
+        # The model field remains the same, but the form field is what the user sees.
+        fields = ['records_to_return', 'approving_aao']
+
+    def __init__(self, *args, **kwargs):
+        # The 'case' and 'user' objects are passed from the view
+        self.case = kwargs.pop('case', None)
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+        if not self.case or not self.user:
+            return
+
+        # Dynamically find the "User Desk" location for the current user.
+        try:
+            user_desk_location = Location.objects.get(custodian=self.user)
+
+            # Set the queryset for the records field.
+            # It should only show records that:
+            # 1. Belong to the pensioner of the current case.
+            # 2. Are currently located at the user's desk (meaning they hold them).
+            # 3. Have a status of 'IN_USE'.
+            records_held_by_user = Record.objects.filter(
+                pensioner=self.case.ppo_master,
+                current_location=user_desk_location,
+                status='IN_USE'
+            )
+            self.fields['records_to_return'].queryset = records_held_by_user
+        except Location.DoesNotExist:
+            # If the user has never had a record handed to them, their desk location might not exist.
+            # In this case, they have no records to return.
+            self.fields['records_to_return'].queryset = Record.objects.none()
+
+
+        # Add Crispy Forms helper for layout
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            'records_to_return',
+            'approving_aao',
+            Submit('submit', 'Submit Return Request', css_class='btn btn-primary mt-3')
+        )
+
+    def save(self, commit=True):
+        # Override the save method to correctly handle the renamed field.
+        # The form uses 'records_to_return', but the model expects 'records_requested'.
+        instance = super().save(commit=False)
+        if commit:
+            instance.save()
+            # This is the crucial part: we assign the selected records from our
+            # 'records_to_return' field to the instance's 'records_requested' ManyToMany field.
+            instance.records_requested.set(self.cleaned_data['records_to_return'])
+        return instance
