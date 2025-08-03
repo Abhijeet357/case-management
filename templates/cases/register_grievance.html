@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Register New Grievance{% endblock %}
+
+{% block extra_css %}
+<style>
+    .input-group .btn {
+        z-index: 5;
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+    
+    .btn-info {
+        background-color: #17a2b8 !important;
+        border-color: #17a2b8 !important;
+        color: white !important;
+    }
+    
+    .btn-info:hover {
+        background-color: #138496 !important;
+        border-color: #117a8b !important;
+    }
+    
+    #fetch-ppo-details-btn {
+        min-width: 80px;
+        white-space: nowrap;
+    }
+    
+    .form-control:focus {
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>Register New Grievance</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Enter a PPO number and click "Fetch" to automatically load pensioner details.</p>
+                    
+                    <!-- Area for status messages -->
+                    <div id="ppo-status-message" class="mt-2"></div>
+
+                    <hr>
+                    
+                    <!-- Manual form rendering to fix the button issues -->
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- PPO Number with Fetch Button -->
+                        <div class="form-group mb-3">
+                            <label for="{{ form.ppo_number.id_for_label }}" class="form-label">
+                                {{ form.ppo_number.label }}
+                                {% if form.ppo_number.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <div class="input-group">
+                                <input type="text" name="ppo_number" class="form-control" id="id_ppo_number" placeholder="Enter PPO Number" maxlength="20">
+                                <button type="button" class="btn btn-info" id="fetch-ppo-details-btn" style="border-left: 1px solid #dee2e6;">
+                                    <i class="fas fa-search me-1"></i>Fetch
+                                </button>
+                            </div>
+                            {% if form.ppo_number.help_text %}
+                                <small class="form-text text-muted">{{ form.ppo_number.help_text }}</small>
+                            {% endif %}
+                            {% if form.ppo_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.ppo_number.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Complainant Name -->
+                        <div class="form-group mb-3">
+                            <label for="{{ form.complainant_name.id_for_label }}" class="form-label">
+                                {{ form.complainant_name.label }}
+                                {% if form.complainant_name.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <input type="text" name="complainant_name" class="form-control" id="id_complainant_name" readonly>
+                            {% if form.complainant_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.complainant_name.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Complainant Contact -->
+                        <div class="form-group mb-3">
+                            <label for="{{ form.complainant_contact.id_for_label }}" class="form-label">
+                                {{ form.complainant_contact.label }}
+                                {% if form.complainant_contact.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <input type="text" name="complainant_contact" class="form-control" id="id_complainant_contact" readonly>
+                            {% if form.complainant_contact.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.complainant_contact.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Mode of Receipt -->
+                        <div class="form-group mb-3">
+                            <label for="{{ form.mode_of_receipt.id_for_label }}" class="form-label">
+                                {{ form.mode_of_receipt.label }}
+                                {% if form.mode_of_receipt.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <select name="mode_of_receipt" class="form-select" id="id_mode_of_receipt">
+                                {% for value, label in form.mode_of_receipt.field.choices %}
+                                    <option value="{{ value }}" {% if form.mode_of_receipt.value == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if form.mode_of_receipt.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.mode_of_receipt.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Date Received -->
+                        <div class="form-group mb-3">
+                            <label for="{{ form.date_received.id_for_label }}" class="form-label">
+                                {{ form.date_received.label }}
+                                {% if form.date_received.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <input type="date" name="date_received" class="form-control" id="id_date_received" 
+                                   value="{{ form.date_received.value|default:'' }}">
+                            {% if form.date_received.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.date_received.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Grievance Text -->
+                        <div class="form-group mb-4">
+                            <label for="{{ form.grievance_text.id_for_label }}" class="form-label">
+                                {{ form.grievance_text.label }}
+                                {% if form.grievance_text.field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            <textarea name="grievance_text" class="form-control" id="id_grievance_text" 
+                                      rows="5" placeholder="Describe the grievance in detail...">{{ form.grievance_text.value|default:'' }}</textarea>
+                            {% if form.grievance_text.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.grievance_text.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Action Buttons - Properly Aligned -->
+                        <div class="d-flex justify-content-between align-items-center mt-4">
+                            <div>
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="fas fa-save me-1"></i>Register Grievance
+                                </button>
+                                <a href="{% url 'dashboard' %}" class="btn btn-secondary">
+                                    <i class="fas fa-times me-1"></i>Cancel
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    console.log('Document ready, setting up fetch button handler');
+    
+    // Ensure fields are editable initially for manual entry
+    $('#id_complainant_name, #id_complainant_contact').prop('readonly', false);
+    
+    // When the "Fetch" button is clicked
+    $('#fetch-ppo-details-btn').on('click', function(e) {
+        e.preventDefault();
+        console.log('Fetch button clicked');
+        
+        var ppoNumber = $('#id_ppo_number').val().trim();
+        var statusDiv = $('#ppo-status-message');
+        var nameField = $('#id_complainant_name');
+        var contactField = $('#id_complainant_contact');
+
+        console.log('PPO Number:', ppoNumber);
+
+        if (!ppoNumber) {
+            statusDiv.html('<div class="alert alert-warning alert-dismissible fade show" role="alert">' +
+                          '<i class="fas fa-exclamation-triangle me-2"></i>Please enter a PPO number.' +
+                          '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+            return;
+        }
+
+        // Show loading state
+        statusDiv.html('<div class="alert alert-info" role="alert">' +
+                      '<i class="fas fa-spinner fa-spin me-2"></i>Fetching details...</div>');
+        
+        var $fetchBtn = $(this);
+        var originalBtnContent = $fetchBtn.html();
+        $fetchBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Fetching...');
+
+        // Make AJAX request
+        $.ajax({
+            url: "{% url 'get_ppo_data' %}",
+            method: 'GET',
+            data: {
+                'ppo_number': ppoNumber
+            },
+            success: function(response) {
+                console.log('AJAX Success:', response);
+                
+                if (response.success && response.data) {
+                    var data = response.data;
+                    
+                    // Populate the fields and make them editable
+                    nameField.val(data.name_pensioner || '').prop('readonly', false);
+                    contactField.val(data.mobile_number || '').prop('readonly', false);
+                    
+                    statusDiv.html('<div class="alert alert-success alert-dismissible fade show" role="alert">' +
+                                  '<i class="fas fa-check-circle me-2"></i>Pensioner details loaded successfully: <strong>' + 
+                                  (data.name_pensioner || 'Unknown') + '</strong>' +
+                                  '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+                } else {
+                    // If not found, clear fields and make them editable for manual entry
+                    nameField.val('').prop('readonly', false);
+                    contactField.val('').prop('readonly', false);
+                    
+                    statusDiv.html('<div class="alert alert-warning alert-dismissible fade show" role="alert">' +
+                                  '<i class="fas fa-exclamation-triangle me-2"></i>' + 
+                                  (response.error || 'PPO not found. Please enter details manually.') +
+                                  '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('AJAX Error:', xhr.status, xhr.responseText);
+                
+                nameField.val('').prop('readonly', false);
+                contactField.val('').prop('readonly', false);
+                
+                var errorMessage = 'An error occurred while fetching data.';
+                if (xhr.status === 404) {
+                    errorMessage = 'PPO data service not found. Please enter details manually.';
+                } else if (xhr.status === 500) {
+                    errorMessage = 'Server error occurred. Please try again or enter details manually.';
+                }
+                
+                statusDiv.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                              '<i class="fas fa-exclamation-circle me-2"></i>' + errorMessage +
+                              '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+            },
+            complete: function() {
+                // Reset button state
+                $fetchBtn.prop('disabled', false).html(originalBtnContent);
+            }
+        });
+    });
+    
+    // Auto-dismiss alerts after 8 seconds
+    setTimeout(function() {
+        $('.alert-dismissible').alert('close');
+    }, 8000);
+    
+    // Handle form submission
+    $('form').on('submit', function(e) {
+        console.log('Form submitted');
+        // Basic validation
+        var ppoNumber = $('#id_ppo_number').val().trim();
+        var complainantName = $('#id_complainant_name').val().trim();
+        var grievanceText = $('textarea[name="grievance_text"]').val().trim();
+        
+        if (!ppoNumber || !complainantName || !grievanceText) {
+            e.preventDefault();
+            $('#ppo-status-message').html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                                         '<i class="fas fa-exclamation-circle me-2"></i>Please fill in all required fields.' +
+                                         '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% load case_extras %} {# <-- ADD THIS LINE TO LOAD THE NEW CUSTOM FILTER #}
+
+{% block title %}Record History Report{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-secondary text-white">
+            <h4 class="mb-0"><i class="fas fa-history"></i> Record Movement History Report</h4>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Search by PPO Number or Pensioner Name to view the complete history of a physical record.</p>
+            
+            <form method="get" class="mb-4">
+                <div class="input-group">
+                    <input type="text" name="q" class="form-control" placeholder="Enter PPO Number or Pensioner Name..." value="{{ query }}">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </form>
+
+            {% if is_search %}
+                <hr>
+                <h5 class="mb-3">Search Results for "{{ query }}"</h5>
+
+                {% if records %}
+                    {% for record in records %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>Record:</strong> {{ record.get_record_type_display }} for {{ record.pensioner.employee_name }} ({{ record.pensioner.ppo_number }})
+                                </div>
+                                <div>
+                                    <strong>Current Status:</strong> <span class="badge bg-info">{{ record.get_status_display }}</span>
+                                    <strong class="ms-3">Current Location:</strong> <span class="badge bg-dark">{{ record.current_location.name }}</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <h6 class="card-title">Movement History:</h6>
+                                {# This line now works because we loaded 'case_extras' #}
+                                {% with movements=record_movements|get_item:record.id %}
+                                    {% if movements %}
+                                        <ul class="list-group list-group-flush">
+                                            {% for move in movements %}
+                                                <li class="list-group-item">
+                                                    <p class="mb-1">
+                                                        Moved from <strong>{{ move.from_location.name }}</strong> to <strong>{{ move.to_location.name }}</strong>
+                                                    </p>
+                                                    <small class="text-muted">
+                                                        On {{ move.timestamp|date:"d M Y, H:i" }} by {{ move.acknowledged_by.user.get_full_name|default:move.acknowledged_by.user.username }}.
+                                                        {% if move.comments %}
+                                                            <br><em>Note: {{ move.comments }}</em>
+                                                        {% endif %}
+                                                    </small>
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        <p class="text-muted">No movement history found for this record.</p>
+                                    {% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-warning text-center">
+                        <p class="mb-0">No records found matching your search query.</p>
+                    </div>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

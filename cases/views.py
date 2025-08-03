@@ -12,97 +12,113 @@ from django.views.decorators.http import require_http_methods, require_POST
 import json
 import csv
 from django.db import transaction, models
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from dateutil.relativedelta import relativedelta
 from .models import Case, CaseType, CaseTypeTrigger, Record,RecordRequisition,RecordMovement,Location, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee, DynamicFormField,CaseMilestone,CaseMilestoneProgress, CaseFieldData
 from .forms import CaseRegistrationForm,CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
 from .forms import RecordRequisitionForm, RecordReturnForm
+from .forms import GrievanceRegistrationForm, GrievanceActionForm
+from .models import Grievance, PPOMaster, get_subordinate_roles
 
 @login_required
 def dashboard(request):
+    """
+    A unified, task-oriented dashboard for all users using the correct role hierarchy.
+    """
     user_profile = get_object_or_404(UserProfile, user=request.user)
-    ALLOWED_ROLES_FOR_OVERALL = ['AO', 'Jt.CCA', 'CCA', 'Pr.CCA', 'ADMIN']
-    show_overall = user_profile.role in ALLOWED_ROLES_FOR_OVERALL
+    task_list = []
 
-    # Filtering logic
-    cases = Case.objects.all()
-    filter_period = request.GET.get('period', '')
-    filter_case_type = request.GET.get('case_type', '')
-    filter_priority = request.GET.get('priority', '')
-    filter_status = request.GET.get('status', '')
-    start_date = request.GET.get('start_date', '')
-    end_date = request.GET.get('end_date', '')
+    # 1. Get pending cases based on role hierarchy
+    subordinate_roles = get_subordinate_roles(user_profile.role)
+    roles_to_view = subordinate_roles + [user_profile.role]
+    
+    if user_profile.role == 'ADMIN':
+        my_pending_cases = Case.objects.filter(is_completed=False)
+    else:
+        my_pending_cases = Case.objects.filter(
+            current_holder__role__in=roles_to_view, 
+            is_completed=False
+        )
 
-    now = timezone.now()
+    for case in my_pending_cases:
+        task_list.append({
+            'type': 'case', 'title': f'Action on Case: {case.case_id}',
+            'description': f'{case.case_title} (Holder: {case.current_holder.user.username})', 
+            'object': case, 'date': case.last_update_date, 'priority': case.priority,
+        })
 
-    # Period filter
-    if filter_period == 'today':
-        cases = cases.filter(registration_date__date=now.date())
-    elif filter_period == 'this_week':
-        week_start = now - timedelta(days=now.weekday())
-        cases = cases.filter(registration_date__date__gte=week_start.date())
-    elif filter_period == 'this_month':
-        cases = cases.filter(registration_date__month=now.month, registration_date__year=now.year)
-    elif filter_period == 'this_year':
-        cases = cases.filter(registration_date__year=now.year)
-    elif filter_period == 'custom' and start_date and end_date:
-        cases = cases.filter(registration_date__date__gte=start_date, registration_date__date__lte=end_date)
+    # 2. Get pending record approvals (for AAOs)
+    if user_profile.role == 'AAO':
+        pending_approvals = RecordRequisition.objects.filter(
+            models.Q(status='PENDING_APPROVAL') | models.Q(status='RETURN_REQUESTED'),
+            approving_aao=user_profile
+        ).select_related('case')
+        for req in pending_approvals:
+            req_type = "New Requisition" if req.status == 'PENDING_APPROVAL' else "Return Request"
+            task_list.append({
+                'type': 'approval', 'title': f'Approval for {req_type}',
+                'description': f'For Case: {req.case.case_id}', 'object': req,
+                'date': req.created_at, 'priority': 'Medium',
+            })
 
-    # Case type filter
-    if filter_case_type:
-        cases = cases.filter(case_type_id=filter_case_type)
-    # Priority filter
-    if filter_priority:
-        cases = cases.filter(priority=filter_priority)
-    # Status filter
-    if filter_status == 'pending':
-        cases = cases.filter(is_completed=False)
-    elif filter_status == 'completed':
-        cases = cases.filter(is_completed=True)
-    elif filter_status == 'overdue':
-        cases = cases.filter(is_completed=False, expected_completion__lt=now)
+    # 3. Get pending actions for Record Keepers
+    if user_profile.is_record_keeper:
+        pending_handovers = RecordRequisition.objects.filter(status='APPROVED').select_related('case')
+        for req in pending_handovers:
+            task_list.append({
+                'type': 'handover', 'title': 'Pending Handover',
+                'description': f'For Case: {req.case.case_id}', 'object': req,
+                'date': req.updated_at, 'priority': 'High',
+            })
+        pending_acks = RecordRequisition.objects.filter(status='RETURN_APPROVED').select_related('case')
+        for req in pending_acks:
+            task_list.append({
+                'type': 'acknowledgment', 'title': 'Acknowledge Return',
+                'description': f'For Case: {req.case.case_id}', 'object': req,
+                'date': req.updated_at, 'priority': 'Medium',
+            })
 
-    filtered_cases = cases.order_by('-registration_date')[:100]  # Limit for performance
+    # 4. Get new grievances that need action
+    if user_profile.role == 'ADMIN':
+        new_grievances = Grievance.objects.filter(status='NEW', generated_case__isnull=True)
+    else:
+        # A user sees grievances assigned to them or their subordinates
+        new_grievances = Grievance.objects.filter(status='NEW', generated_case__isnull=True, assigned_to__role__in=roles_to_view)
 
-    # Stats (recalculate for filtered set)
-    total_cases = cases.count()
-    pending_cases = cases.filter(is_completed=False).count()
-    completed_cases = cases.filter(is_completed=True).count()
-    overdue_cases = cases.filter(is_completed=False, expected_completion__lt=now).count()
-    high_priority = cases.filter(priority='High', is_completed=False).count()
-    medium_priority = cases.filter(priority='Medium', is_completed=False).count()
-    low_priority = cases.filter(priority='Low', is_completed=False).count()
-    recent_cases = cases.order_by('-registration_date')[:10]
-    stage_stats = {}
-    for stage in ['DH', 'AAO', 'AO', 'Jt.CCA', 'CCA', 'Pr.CCA']:
-        stage_stats[stage] = cases.filter(current_holder__role=stage, is_completed=False).count()
+    for grievance in new_grievances:
+        aware_datetime = timezone.make_aware(datetime.combine(grievance.date_received, time.min))
+        task_list.append({
+            'type': 'grievance', 'title': f'New Grievance: {grievance.grievance_id}',
+            'description': f'From: {grievance.complainant_name} for {grievance.pensioner.employee_name}',
+            'object': grievance, 'date': aware_datetime, 'priority': 'High',
+        })
 
-    my_cases = Case.objects.filter(current_holder=user_profile, is_completed=False)
+    # 5. Sort all tasks by date
+    task_list.sort(key=lambda x: x['date'], reverse=True)
+    
+    # --- Statistical Overview ---
+    if user_profile.role == 'ADMIN':
+        all_cases_for_stats = Case.objects.all()
+    else:
+        all_cases_for_stats = Case.objects.filter(current_holder__role__in=roles_to_view)
+    
+    total_cases = all_cases_for_stats.count()
+    pending_cases_count = all_cases_for_stats.filter(is_completed=False).count()
+    overdue_cases_count = all_cases_for_stats.filter(is_completed=False, expected_completion__lt=timezone.now()).count()
+    
+    my_held_records = []
+    try:
+        user_desk = Location.objects.get(custodian=user_profile, location_type='USER_DESK')
+        my_held_records = Record.objects.filter(current_location=user_desk, status='IN_USE')
+    except Location.DoesNotExist:
+        pass
 
     context = {
-        'user_profile': user_profile,
-        'show_overall': show_overall,
-        'case_types': CaseType.objects.all(),
-        'filtered_cases': filtered_cases,
-        'filter_period': filter_period,
-        'filter_case_type': filter_case_type,
-        'filter_priority': filter_priority,
-        'filter_status': filter_status,
-        'start_date': start_date,
-        'end_date': end_date,
-        'now': now,
-        'total_cases': total_cases,
-        'pending_cases': pending_cases,
-        'completed_cases': completed_cases,
-        'overdue_cases': overdue_cases,
-        'high_priority': high_priority,
-        'medium_priority': medium_priority,
-        'low_priority': low_priority,
-        'recent_cases': recent_cases,
-        'stage_stats': stage_stats,
-        'my_cases': my_cases,
+        'user_profile': user_profile, 'task_list': task_list,
+        'total_cases': total_cases, 'pending_cases_count': pending_cases_count,
+        'overdue_cases_count': overdue_cases_count, 'my_held_records': my_held_records,
     }
-    return render(request, 'cases/dashboard.html', context)
+    return render(request, 'cases/dashboard_interactive.html', context)
 
 @login_required
 def case_list(request):
@@ -360,20 +376,31 @@ def move_case(request, case_id):
 @require_http_methods(["GET"])
 def get_ppo_data(request):
     """
-    AJAX view to fetch PPO data based on PPO number
+    AJAX view to fetch PPO data based on PPO number for grievance registration
     Returns: name_pensioner, pensioner_type, date_of_retirement, mobile_number
     """
     ppo_number = request.GET.get('ppo_number', '').strip()
     
+    # Debug logging
+    print(f"DEBUG: get_ppo_data called with PPO number: '{ppo_number}'")
+    print(f"DEBUG: Request method: {request.method}")
+    print(f"DEBUG: Request GET params: {request.GET}")
+    
     if not ppo_number:
+        print("DEBUG: No PPO number provided")
         return JsonResponse({
             'success': False,
             'error': 'PPO number is required'
         })
     
     try:
+        # Check if PPOMaster table has any data
+        total_ppos = PPOMaster.objects.count()
+        print(f"DEBUG: Total PPOs in database: {total_ppos}")
+        
         # Try to find PPO in PPOMaster
         ppo_master = PPOMaster.objects.get(ppo_number=ppo_number)
+        print(f"DEBUG: Found PPO Master: {ppo_master}")
         
         # Format date_of_retirement to dd-mm-yyyy format
         formatted_retirement_date = ''
@@ -390,23 +417,34 @@ def get_ppo_data(request):
             'success': True,
             'data': {
                 'name_pensioner': ppo_master.employee_name.strip() if ppo_master.employee_name else '',
-                'pensioner_type': ppo_master.type_of_pensioner.strip() if hasattr(ppo_master, 'type_of_pensioner') and ppo_master.type_of_pensioner else '',
+                'pensioner_type': getattr(ppo_master, 'type_of_pensioner', ''),
                 'date_of_retirement': formatted_retirement_date,
                 'mobile_number': ppo_master.mobile_number.strip() if ppo_master.mobile_number else '',
-                'pension_type': ppo_master.pension_type.strip() if ppo_master.pension_type else '',
+                'pension_type': getattr(ppo_master, 'pension_type', ''),
                 'date_of_death': formatted_death_date,
             }
         }
         
+        print(f"DEBUG: Returning data: {data}")
         return JsonResponse(data)
         
     except PPOMaster.DoesNotExist:
+        print(f"DEBUG: PPO number '{ppo_number}' not found in database")
+        
+        # Show some sample PPO numbers for debugging
+        sample_ppos = list(PPOMaster.objects.values_list('ppo_number', flat=True)[:5])
+        print(f"DEBUG: Sample PPO numbers in database: {sample_ppos}")
+        
         return JsonResponse({
             'success': False,
-            'error': 'PPO number not found in database'
+            'error': f'PPO number "{ppo_number}" not found in database'
         })
     
     except Exception as e:
+        print(f"DEBUG: Exception occurred: {str(e)}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        
         return JsonResponse({
             'success': False,
             'error': f'An error occurred while fetching PPO data: {str(e)}'
@@ -1395,3 +1433,179 @@ def trigger_auto_requisition(case, user_profile, request):
 
     except Exception as e:
         print(f"AUTO-REQUISITION FAILED: Error creating requisition for case {case.case_id}: {e}")
+        login_required
+def record_history_report(request):
+    """
+    Provides a page to search for a record by PPO number and view its
+    complete movement history.
+    """
+    # Get the search query from the URL parameters (e.g., ?q=PPO123)
+    query = request.GET.get('q', '')
+    records = None
+    record_movements = {} # A dictionary to hold movements for each record
+
+    if query:
+        # If a query is submitted, search for records belonging to pensioners
+        # with a matching PPO number or name.
+        records = Record.objects.filter(
+            Q(pensioner__ppo_number__icontains=query) |
+            Q(pensioner__employee_name__icontains=query)
+        ).select_related('pensioner', 'current_location', 'current_location__custodian__user')
+
+        if records:
+            # For each record found, fetch its entire movement history.
+            for record in records:
+                record_movements[record.id] = RecordMovement.objects.filter(
+                    record=record
+                ).order_by('-timestamp').select_related('from_location', 'to_location', 'acknowledged_by__user')
+
+    context = {
+        'query': query,
+        'records': records,
+        'record_movements': record_movements,
+        'is_search': bool(query), # A flag to know if a search has been performed
+    }
+    return render(request, 'cases/record_history_report.html', context)
+
+@login_required
+def register_grievance(request):
+    """
+    Handles the display and processing of the grievance registration form.
+    """
+    if request.method == 'POST':
+        form = GrievanceRegistrationForm(request.POST)
+        if form.is_valid():
+            pensioner_object = form.pensioner_object
+            
+            grievance = form.save(commit=False)
+            grievance.pensioner = pensioner_object
+            grievance.save()
+            
+            messages.success(request, f"Grievance {grievance.grievance_id} has been successfully registered.")
+            
+            # CORRECTED: Redirect using the string-based 'grievance_id' instead of the integer 'id'
+            return redirect('take_grievance_action', grievance_id=grievance.grievance_id)
+    else:
+        form = GrievanceRegistrationForm()
+
+    context = {
+        'form': form,
+    }
+    return render(request, 'cases/register_grievance.html', context)
+
+
+@login_required
+def take_grievance_action(request, grievance_id):
+    """
+    Displays a registered grievance and provides a form to create a formal
+    case from it.
+    """
+    # CORRECTED: Look up the grievance using the string 'grievance_id' field
+    grievance = get_object_or_404(Grievance, grievance_id=grievance_id)
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+
+    if grievance.generated_case:
+        messages.warning(request, "Action has already been taken on this grievance.")
+        return redirect('case_detail', case_id=grievance.generated_case.case_id)
+
+    if request.method == 'POST':
+        form = GrievanceActionForm(request.POST)
+        if form.is_valid():
+            case_type = form.cleaned_data['case_type']
+            
+            initial_holder = UserProfile.objects.filter(role='DH', is_active_holder=True).first()
+            if not initial_holder:
+                messages.error(request, "No active Dealing Hand found to assign the case. Please configure users.")
+                return redirect('take_grievance_action', grievance_id=grievance.grievance_id)
+
+            with transaction.atomic():
+                new_case = Case.objects.create(
+                    case_type=case_type,
+                    ppo_master=grievance.pensioner,
+                    applicant_name=grievance.complainant_name,
+                    case_description=grievance.grievance_text,
+                    case_title=f"{case_type.name} from Grievance {grievance.grievance_id}",
+                    current_holder=initial_holder,
+                    current_status=f"With {initial_holder.user.username}",
+                    created_by=request.user,
+                    last_updated_by=request.user
+                )
+
+                CaseMovement.objects.create(
+                    case=new_case,
+                    from_stage='Grievance',
+                    to_stage=initial_holder.role,
+                    to_holder=initial_holder,
+                    action='Case created from Grievance',
+                    updated_by=request.user
+                )
+
+                grievance.generated_case = new_case
+                grievance.status = 'ACTION_INITIATIED' # Note: Typo in original, should be 'ACTION_INITIATED'
+                grievance.save()
+
+            messages.success(request, f"Case {new_case.case_id} has been successfully created from the grievance.")
+            return redirect('case_detail', case_id=new_case.case_id)
+    else:
+        form = GrievanceActionForm()
+
+    context = {
+        'grievance': grievance,
+        'form': form,
+    }
+    return render(request, 'cases/take_grievance_action.html', context)
+
+@login_required
+def grievance_list(request):
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    subordinate_roles = get_subordinate_roles(user_profile.role)
+    roles_to_view = subordinate_roles + [user_profile.role]
+
+    if user_profile.role == 'ADMIN':
+        grievances = Grievance.objects.all()
+    else:
+        grievances = Grievance.objects.filter(Q(assigned_to__role__in=roles_to_view) | Q(created_by=request.user))
+    
+    paginator = Paginator(grievances.order_by('-date_received'), 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'cases/grievance_list.html', {'page_obj': page_obj})
+
+@login_required
+def my_grievances(request):
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    my_grievances = Grievance.objects.filter(assigned_to=user_profile)
+    return render(request, 'cases/my_grievances.html', {'my_grievances': my_grievances})
+
+# Add placeholder views for the other grievance URLs to prevent errors
+@login_required
+def pending_grievance_actions(request):
+    return HttpResponse("Page for Pending Grievance Actions (to be built)")
+
+@login_required
+def grievance_dashboard(request):
+    return HttpResponse("Page for Grievance Dashboard (to be built)")
+
+@login_required
+def escalated_grievances(request):
+    return HttpResponse("Page for Escalated Grievances (to be built)")
+
+@login_required
+def overdue_grievances(request):
+    return HttpResponse("Page for Overdue Grievances (to be built)")
+
+@login_required
+def grievance_reports(request):
+    return HttpResponse("Page for Grievance Reports (to be built)")
+
+@login_required
+def search_grievances(request):
+    return HttpResponse("Page for Advanced Grievance Search (to be built)")
+
+@login_required 
+def export_grievances(request):
+    return HttpResponse("Functionality for Exporting Grievances (to be built)")
+
+# ... (Include all your other existing views like register_case, move_case, record management views, etc. here)
+# Make sure to keep all the views from your original project that are not listed above.

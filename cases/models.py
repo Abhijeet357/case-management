@@ -3,6 +3,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from datetime import date, datetime
 from django.core.validators import RegexValidator
 import uuid
 from simple_history.models import HistoricalRecords
@@ -10,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from django.core.validators import RegexValidator
 from django.db.models import Q
+
 
 WORKFLOW_STAGES = {
     'Type_A': ['DH', 'AAO', 'AO'],
@@ -976,3 +978,76 @@ class CaseTypeTrigger(models.Model):
 
     def __str__(self):
         return f"Trigger for {self.case_type.name}: {self.get_trigger_event_display()}"
+    
+# ==============================================================================
+# == NEW MODELS FOR GRIEVANCE MANAGEMENT (As per new plan)
+# ==============================================================================
+
+class GrievanceMode(models.Model):
+    """
+    A model to allow administrators to configure the different modes by which
+    a grievance can be received (e.g., By Post, Email, CPGRAMS Portal).
+    This makes the grievance modes configurable from the admin panel.
+    """
+    name = models.CharField(max_length=100, unique=True, help_text="The name of the grievance mode.")
+    is_active = models.BooleanField(default=True, help_text="Deactivate to hide this mode from forms.")
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Grievance Mode"
+        verbose_name_plural = "Grievance Modes"
+
+    def __str__(self):
+        return self.name
+
+
+class Grievance(models.Model):
+    """
+    Represents a single grievance filed by a pensioner or claimant.
+    This grievance can then trigger the creation of a formal Case.
+    """
+    GRIEVANCE_STATUS_CHOICES = [
+        ('NEW', 'New'),
+        ('ACTION_INITIATED', 'Action Initiated (Case Created)'),
+        ('DISPOSED', 'Disposed'),
+    ]
+    DISPOSAL_TYPE_CHOICES = [
+        ('INTERIM_REPLY', 'Interim Reply'),
+        ('FINAL_REPLY', 'Final Reply'),
+    ]
+
+    grievance_id = models.CharField(max_length=50, unique=True, db_index=True, help_text="A unique ID for the grievance.")
+    pensioner = models.ForeignKey(PPOMaster, on_delete=models.PROTECT, related_name='grievances', help_text="The pensioner this grievance relates to.")
+    
+    complainant_name = models.CharField(max_length=200)
+    complainant_contact = models.CharField(max_length=100, blank=True, help_text="Phone number or email address.")
+    
+    mode_of_receipt = models.ForeignKey('GrievanceMode', on_delete=models.PROTECT, help_text="How the grievance was received.")
+    
+    grievance_text = models.TextField(help_text="The full text of the complaint.")
+    date_received = models.DateField(default=timezone.now)
+    
+    status = models.CharField(max_length=20, choices=GRIEVANCE_STATUS_CHOICES, default='NEW')
+    disposal_type = models.CharField(max_length=20, choices=DISPOSAL_TYPE_CHOICES, null=True, blank=True)
+    reply_details = models.TextField(blank=True, help_text="Details of the interim or final reply provided.")
+    date_disposed = models.DateField(null=True, blank=True)
+
+    generated_case = models.OneToOneField('Case', on_delete=models.SET_NULL, null=True, blank=True, related_name='source_grievance')
+
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ['-date_received']
+        verbose_name = "Grievance"
+        verbose_name_plural = "Grievances"
+
+    def __str__(self):
+        return f"Grievance {self.grievance_id} for {self.pensioner.employee_name}"
+
+    def save(self, *args, **kwargs):
+        # Auto-generate a unique ID if one isn't provided
+        if not self.grievance_id:
+            today = date.today() # This line now works because of the import
+            count = Grievance.objects.filter(date_received__year=today.year, date_received__month=today.month).count() + 1
+            self.grievance_id = f"GRV-{today.year}-{today.month:02d}-{count:04d}"
+        super().save(*args, **kwargs)

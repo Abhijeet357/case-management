@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Take Action on Grievance: {{ grievance.grievance_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-9">
+
+            <!-- Card to display the details of the grievance -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0"><i class="fas fa-file-alt me-2"></i>Grievance Details</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Grievance ID:</strong> {{ grievance.grievance_id }}</p>
+                            <p><strong>Pensioner:</strong> {{ grievance.pensioner.employee_name }}</p>
+                            <p><strong>PPO Number:</strong> {{ grievance.pensioner.ppo_number }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Date Received:</strong> {{ grievance.date_received|date:"d M Y" }}</p>
+                            <p><strong>Mode of Receipt:</strong> {{ grievance.mode_of_receipt.name }}</p>
+                            <p><strong>Complainant:</strong> {{ grievance.complainant_name }}</p>
+                        </div>
+                    </div>
+                    <hr>
+                    <p><strong>Grievance Details:</strong></p>
+                    <p class="ms-2"><em>{{ grievance.grievance_text|linebreaksbr }}</em></p>
+                </div>
+            </div>
+
+            <!-- Card for the "Take Action" form -->
+            <div class="card shadow-sm border-success">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="fas fa-arrow-right me-2"></i>Next Step: Take Action</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">To resolve this grievance, please create a formal case by selecting the appropriate case type from the list below.</p>
+                    
+                    {% crispy form %}
+
+                    <div class="mt-3">
+                        <a href="{% url 'dashboard' %}" class="btn btn-secondary">Do this Later</a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

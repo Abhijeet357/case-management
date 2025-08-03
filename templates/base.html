@@ -5,45 +5,97 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Case Management System{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'dashboard' %}">
-                <i class="fas fa-briefcase"></i> Case Management
-            </a>
-            <div class="navbar-nav ms-auto">
-                {% if user.is_authenticated %}
-                    <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
-                    <a class="nav-link" href="{% url 'case_list' %}">Cases</a>
-                    <a class="nav-link" href="{% url 'register_case' %}">New Case</a>
-                    <a class="nav-link" href="{% url 'logout' %}">Logout</a>
-                {% else %}
-                    <a class="nav-link" href="{% url 'login' %}">Login</a>
-                    <a class="nav-link" href="{% url 'register_user' %}">Register</a>
-                {% endif %}
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'dashboard' %}"><i class="fas fa-briefcase me-2"></i>Case Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard' %}"><i class="fas fa-tachometer-alt me-1"></i>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'case_list' %}"><i class="fas fa-list me-1"></i>Cases</a>
+                    </li>
+                    <!-- CORRECTED: "New Case" Dropdown is now back -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="newCaseDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-plus-circle me-1"></i>New
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{% url 'register_case' %}"><i class="fas fa-file-alt me-2"></i>Register New Case</a></li>
+                            <li><a class="dropdown-item" href="{% url 'register_grievance' %}"><i class="fas fa-edit me-2"></i>Register New Grievance</a></li>
+                            <li><a class="dropdown-item" href="{% url 'bulk_import_cases' %}"><i class="fas fa-upload me-2"></i>Bulk Import Cases</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="grievancesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Grievances
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{% url 'grievance_list' %}"><i class="fas fa-list-ul me-2"></i>View All Grievances</a></li>
+                            <li><a class="dropdown-item" href="{% url 'my_grievances' %}"><i class="fas fa-user-tag me-2"></i>My Grievances</a></li>
+                            <li><a class="dropdown-item" href="{% url 'pending_grievance_actions' %}"><i class="fas fa-clock me-2"></i>Pending Actions</a></li>
+                             {% if user.userprofile.role != 'DH' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'grievance_dashboard' %}"><i class="fas fa-chart-bar me-2"></i>Grievance Dashboard</a></li>
+                            <li><a class="dropdown-item" href="{% url 'grievance_reports' %}"><i class="fas fa-chart-line me-2"></i>Detailed Reports</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="recordsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-folder-open me-1"></i>Records
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{% url 'record_history_report' %}"><i class="fas fa-history me-2"></i>History Report</a></li>
+                            {% if user.userprofile.role == 'AAO' %}
+                            <li><a class="dropdown-item" href="{% url 'requisition_approval_dashboard' %}"><i class="fas fa-check-circle me-2"></i>Approval Dashboard</a></li>
+                            {% endif %}
+                            {% if user.userprofile.is_record_keeper %}
+                            <li><a class="dropdown-item" href="{% url 'record_keeper_dashboard' %}"><i class="fas fa-warehouse me-2"></i>Keeper Dashboard</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user me-1"></i>{{ user.get_full_name|default:user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                     <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Login</a></li>
+                    {% endif %}
+                </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
+    <main class="container-fluid mt-4">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
+                    <i class="fas fa-info-circle me-2"></i>{{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             {% endfor %}
         {% endif %}
-
-        {% block content %}
-        {% endblock %}
-    </div>
+        {% block content %}{% endblock %}
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    {% block scripts %}
-    {% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>

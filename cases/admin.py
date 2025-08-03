@@ -10,11 +10,12 @@ from django.utils.safestring import mark_safe
 from django.db.models import Q, Count
 from django.contrib import messages
 
+
 # Import all models (existing + new)
 from .models import (
     UserProfile, PPOMaster, CaseType, Case, CaseMovement, RetiringEmployee, FamilyMember,
     # New enhanced models
-    DynamicFormField, CaseMilestone, CaseMilestoneProgress, CaseFieldData,Location, Record, RecordRequisition, RecordMovement, CaseTypeTrigger
+    DynamicFormField, GrievanceMode, Grievance, CaseMilestone, CaseMilestoneProgress, CaseFieldData,Location, Record, RecordRequisition, RecordMovement, CaseTypeTrigger
 )
 from django.contrib.auth.models import User
 
@@ -674,3 +675,48 @@ if not admin.site.is_registered(PPOMaster):
     admin.site.register(PPOMaster)
 if not admin.site.is_registered(CaseMovement):
     admin.site.register(CaseMovement)
+    # ==============================================================================
+# == NEW ADMIN REGISTRATIONS FOR GRIEVANCE MANAGEMENT
+# ==============================================================================
+
+@admin.register(GrievanceMode)
+class GrievanceModeAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing the configurable Grievance Modes.
+    """
+    list_display = ('name', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name',)
+    actions = ['activate_modes', 'deactivate_modes']
+
+    def activate_modes(self, request, queryset):
+        queryset.update(is_active=True)
+    activate_modes.short_description = "Mark selected modes as active"
+
+    def deactivate_modes(self, request, queryset):
+        queryset.update(is_active=False)
+    deactivate_modes.short_description = "Mark selected modes as inactive"
+
+
+@admin.register(Grievance)
+class GrievanceAdmin(admin.ModelAdmin):
+    """
+    Admin interface for viewing and managing Grievances.
+    """
+    list_display = ('grievance_id', 'pensioner', 'status', 'disposal_type', 'date_received', 'generated_case')
+    list_filter = ('status', 'disposal_type', 'mode_of_receipt', 'date_received')
+    search_fields = ('grievance_id', 'pensioner__ppo_number', 'pensioner__employee_name', 'complainant_name')
+    autocomplete_fields = ('pensioner', 'generated_case')
+    date_hierarchy = 'date_received'
+    ordering = ('-date_received',)
+
+    fieldsets = (
+        ('Grievance Details', {
+            'fields': ('grievance_id', 'pensioner', 'complainant_name', 'complainant_contact', 'mode_of_receipt', 'date_received', 'grievance_text')
+        }),
+        ('Resolution & Case Link', {
+            'fields': ('status', 'disposal_type', 'reply_details', 'date_disposed', 'generated_case')
+        }),
+    )
+    # Make grievance_id read-only after creation
+    readonly_fields = ('grievance_id',)
