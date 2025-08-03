@@ -1,0 +1,296 @@
+{% comment %}
+templates/cases/my_record_requests.html
+Shows all record requests made by the current user (DH role)
+{% endcomment %}
+
+{% extends 'base.html' %}
+
+{% block title %}My Record Requests{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-inbox me-2"></i>My Record Requests</h2>
+        <div class="text-muted">
+            Total Requests: <span class="badge bg-primary">{{ total_requests }}</span>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-warning">Pending Approval</h5>
+                    <h2 class="text-warning">{{ pending_requests.count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-info">Approved</h5>
+                    <h2 class="text-info">{{ approved_requests.count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">In Use</h5>
+                    <h2 class="text-success">{{ in_use_requests.count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-secondary">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-secondary">Return Requested</h5>
+                    <h2 class="text-secondary">{{ return_requested.count }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Approval Requests -->
+    {% if pending_requests %}
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Approval ({{ pending_requests.count }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Pensioner</th>
+                            <th>Records Requested</th>
+                            <th>Approving AAO</th>
+                            <th>Requested Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in pending_requests %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'case_detail' request.case.case_id %}" class="text-decoration-none">
+                                    {{ request.case.case_id }}
+                                </a>
+                            </td>
+                            <td>{{ request.case.ppo_master.employee_name }}</td>
+                            <td>
+                                {% for record in request.records_requested.all %}
+                                    <span class="badge bg-secondary me-1">{{ record.get_record_type_display }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ request.approving_aao.user.get_full_name|default:request.approving_aao.user.username }}</td>
+                            <td>{{ request.created_at|date:"M d, Y H:i" }}</td>
+                            <td>
+                                <small class="text-muted">Waiting for approval</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Approved Requests -->
+    {% if approved_requests %}
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-check me-2"></i>Approved - Awaiting Handover ({{ approved_requests.count }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Pensioner</th>
+                            <th>Records</th>
+                            <th>Approved Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in approved_requests %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'case_detail' request.case.case_id %}" class="text-decoration-none">
+                                    {{ request.case.case_id }}
+                                </a>
+                            </td>
+                            <td>{{ request.case.ppo_master.employee_name }}</td>
+                            <td>
+                                {% for record in request.records_requested.all %}
+                                    <span class="badge bg-info me-1">{{ record.get_record_type_display }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ request.updated_at|date:"M d, Y H:i" }}</td>
+                            <td><span class="badge bg-info">Waiting for Record Keeper</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Records In Use -->
+    {% if in_use_requests %}
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-hand-holding me-2"></i>Records Currently With Me ({{ in_use_requests.count }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Pensioner</th>
+                            <th>Records</th>
+                            <th>Received Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in in_use_requests %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'case_detail' request.case.case_id %}" class="text-decoration-none">
+                                    {{ request.case.case_id }}
+                                </a>
+                            </td>
+                            <td>{{ request.case.ppo_master.employee_name }}</td>
+                            <td>
+                                {% for record in request.records_requested.all %}
+                                    <span class="badge bg-success me-1">{{ record.get_record_type_display }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ request.updated_at|date:"M d, Y H:i" }}</td>
+                            <td>
+                                <a href="{% url 'return_record' request.case.case_id %}" class="btn btn-sm btn-outline-warning">
+                                    <i class="fas fa-undo me-1"></i>Return Records
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Return Requested -->
+    {% if return_requested %}
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0"><i class="fas fa-arrow-left me-2"></i>Return Requested ({{ return_requested.count }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Pensioner</th>
+                            <th>Records</th>
+                            <th>Return Requested</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in return_requested %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'case_detail' request.case.case_id %}" class="text-decoration-none">
+                                    {{ request.case.case_id }}
+                                </a>
+                            </td>
+                            <td>{{ request.case.ppo_master.employee_name }}</td>
+                            <td>
+                                {% for record in request.records_requested.all %}
+                                    <span class="badge bg-secondary me-1">{{ record.get_record_type_display }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ request.updated_at|date:"M d, Y H:i" }}</td>
+                            <td><span class="badge bg-warning">Pending AAO Approval</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Completed Requests -->
+    {% if completed_requests %}
+    <div class="card">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i>Completed Requests ({{ completed_requests.count }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Pensioner</th>
+                            <th>Records</th>
+                            <th>Final Status</th>
+                            <th>Completed Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in completed_requests %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'case_detail' request.case.case_id %}" class="text-decoration-none">
+                                    {{ request.case.case_id }}
+                                </a>
+                            </td>
+                            <td>{{ request.case.ppo_master.employee_name }}</td>
+                            <td>
+                                {% for record in request.records_requested.all %}
+                                    <span class="badge bg-light text-dark me-1">{{ record.get_record_type_display }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% if request.status == 'RETURNED' %}
+                                    <span class="badge bg-success">Returned</span>
+                                {% elif request.status == 'REJECTED' %}
+                                    <span class="badge bg-danger">Rejected</span>
+                                {% elif request.status == 'RETURN_REJECTED' %}
+                                    <span class="badge bg-warning">Return Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ request.updated_at|date:"M d, Y H:i" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not pending_requests and not approved_requests and not in_use_requests and not return_requested and not completed_requests %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">No Record Requests Found</h4>
+            <p class="text-muted">You haven't made any record requests yet. You can request records from case detail pages when needed.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

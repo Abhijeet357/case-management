@@ -1,0 +1,253 @@
+{% comment %}
+templates/cases/my_held_records.html
+Shows all records currently held by the user (DH role)
+{% endcomment %}
+
+{% extends 'base.html' %}
+
+{% block title %}Records I Hold{% endblock %}
+
+{% block extra_css %}
+<style>
+    .record-card {
+        transition: transform 0.2s;
+    }
+    
+    .record-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .pensioner-section {
+        border-left: 4px solid #007bff;
+        padding-left: 15px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-hand-holding me-2"></i>Records I Currently Hold</h2>
+        <div class="text-muted">
+            Total Records: <span class="badge bg-primary">{{ total_held }}</span>
+        </div>
+    </div>
+
+    {% if held_records %}
+        <!-- Summary Alert -->
+        <div class="alert alert-info mb-4">
+            <i class="fas fa-info-circle me-2"></i>
+            You are currently holding <strong>{{ total_held }}</strong> record(s) for <strong>{{ records_by_pensioner|length }}</strong> pensioner(s). 
+            Remember to return records when your work is completed.
+        </div>
+
+        <!-- Records grouped by pensioner -->
+        {% for pensioner, records in records_by_pensioner.items %}
+        <div class="pensioner-section">
+            <div class="card record-card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h5 class="mb-0">
+                                <i class="fas fa-user me-2"></i>{{ pensioner.employee_name }}
+                            </h5>
+                            <small>PPO: {{ pensioner.ppo_number }}</small>
+                        </div>
+                        <div class="col-auto">
+                            <span class="badge bg-light text-dark">{{ records|length }} Record{{ records|length|pluralize }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Records for this pensioner -->
+                    <div class="row">
+                        {% for record in records %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-success">
+                                <div class="card-body">
+                                    <h6 class="card-title text-success">
+                                        <i class="fas fa-folder me-2"></i>{{ record.get_record_type_display }}
+                                    </h6>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock me-1"></i>In use since: 
+                                            {% comment %}
+                                            You might want to add a field to track when the record was taken
+                                            For now, we'll use the updated_at field
+                                            {% endcomment %}
+                                            {{ record.updated_at|date:"M d, Y H:i" }}
+                                        </small>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Active cases for this pensioner -->
+                    {% with pensioner_cases=active_cases|default_if_none:"" %}
+                        {% for case in active_cases %}
+                            {% if case.ppo_master == pensioner %}
+                                <div class="mt-3 p-3 bg-light rounded">
+                                    <h6 class="text-primary mb-2">
+                                        <i class="fas fa-briefcase me-2"></i>Active Case: {{ case.case_id }}
+                                    </h6>
+                                    <p class="mb-2">{{ case.case_title }}</p>
+                                    <div class="d-flex gap-2">
+                                        <a href="{% url 'case_detail' case.case_id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i>View Case
+                                        </a>
+                                        <a href="{% url 'return_record' case.case_id %}" class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-undo me-1"></i>Return Records
+                                        </a>
+                                    </div>
+                                </div>
+                                {% break %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endwith %}
+
+                    <!-- If no active case, still show return option -->
+                    {% if not active_cases or pensioner not in active_cases %}
+                        <div class="mt-3">
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                No active case found for this pensioner. You may still return these records if no longer needed.
+                            </p>
+                            <button class="btn btn-sm btn-outline-warning" onclick="findCaseForReturn('{{ pensioner.ppo_number }}')">
+                                <i class="fas fa-search me-1"></i>Find Case to Return Records
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Quick Actions Panel -->
+        <div class="card bg-light">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{% url 'my_record_requests' %}" class="btn btn-outline-primary">
+                                <i class="fas fa-list me-2"></i>View All My Requests
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <button type="button" class="btn btn-outline-info" onclick="showReturnAllDialog()">
+                                <i class="fas fa-undo me-2"></i>Return Multiple Records
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{% url 'record_history_report' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-history me-2"></i>View Record History
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    {% else %}
+        <!-- No records held -->
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-hand-holding fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No Records Currently Held</h4>
+                <p class="text-muted">You don't have any physical records at your desk right now.</p>
+                <p class="text-muted">When you request records for your cases, they will appear here once handed over to you.</p>
+                
+                <div class="mt-4">
+                    <a href="{% url 'case_list' %}" class="btn btn-primary me-2">
+                        <i class="fas fa-briefcase me-1"></i>View My Cases
+                    </a>
+                    <a href="{% url 'my_record_requests' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-list me-1"></i>View My Record Requests
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal for Return Multiple Records -->
+<div class="modal fade" id="returnMultipleModal" tabindex="-1" aria-labelledby="returnMultipleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="returnMultipleModalLabel">Return Multiple Records</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>To return multiple records, you need to process them case by case. Select a pensioner to return their records:</p>
+                
+                {% for pensioner, records in records_by_pensioner.items %}
+                <div class="card mb-2">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ pensioner.employee_name }}</strong><br>
+                                <small class="text-muted">{{ records|length }} record{{ records|length|pluralize }} • PPO: {{ pensioner.ppo_number }}</small>
+                            </div>
+                            <div>
+                                {% comment %}
+                                We need to find a case for this pensioner to create a return request
+                                This would require additional logic in the backend
+                                {% endcomment %}
+                                <button class="btn btn-sm btn-outline-warning" onclick="initiateReturn('{{ pensioner.ppo_number }}')">
+                                    Return
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showReturnAllDialog() {
+    {% if records_by_pensioner %}
+    var modal = new bootstrap.Modal(document.getElementById('returnMultipleModal'));
+    modal.show();
+    {% else %}
+    alert('No records to return.');
+    {% endif %}
+}
+
+function findCaseForReturn(ppoNumber) {
+    // This would ideally search for cases related to this PPO number
+    // For now, we'll redirect to the case list with a filter
+    window.location.href = "{% url 'case_list' %}?search=" + ppoNumber;
+}
+
+function initiateReturn(ppoNumber) {
+    // This would need backend support to find the appropriate case
+    // and redirect to the return records page
+    findCaseForReturn(ppoNumber);
+}
+
+// Auto-refresh held records count every 5 minutes
+setInterval(function() {
+    // Could add AJAX call to refresh the count
+    console.log('Checking for record updates...');
+}, 5 * 60 * 1000);
+</script>
+{% endblock %}

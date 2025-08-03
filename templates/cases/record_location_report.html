@@ -1,0 +1,350 @@
+{% comment %}
+templates/cases/record_location_report.html
+Shows where all records are currently located (for Record Keepers)
+{% endcomment %}
+
+{% extends 'base.html' %}
+
+{% block title %}Record Location Report{% endblock %}
+
+{% block extra_css %}
+<style>
+    .location-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .location-card.record-room {
+        border-left-color: #28a745;
+    }
+    
+    .location-card.user-desk {
+        border-left-color: #007bff;
+    }
+    
+    .location-card.external-office {
+        border-left-color: #ffc107;
+    }
+    
+    .record-item {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 4px 0;
+        border-left: 3px solid transparent;
+    }
+    
+    .record-item.available {
+        border-left-color: #28a745;
+    }
+    
+    .record-item.in-use {
+        border-left-color: #007bff;
+    }
+    
+    .record-item.requisitioned {
+        border-left-color: #ffc107;
+    }
+    
+    .record-item.missing {
+        border-left-color: #dc3545;
+    }
+    
+    .stats-card {
+        border: none;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-map-marker-alt me-2"></i>Record Location Report</h2>
+        <div>
+            <button class="btn btn-outline-primary me-2" onclick="window.print()">
+                <i class="fas fa-print me-1"></i>Print Report
+            </button>
+            <button class="btn btn-outline-secondary" onclick="refreshData()">
+                <i class="fas fa-sync me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card stats-card bg-primary text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-folder fa-2x mb-2"></i>
+                    <h4>{{ total_records }}</h4>
+                    <small>Total Records</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stats-card bg-success text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h4>{{ available_records }}</h4>
+                    <small>Available</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stats-card bg-info text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-hand-holding fa-2x mb-2"></i>
+                    <h4>{{ in_use_records }}</h4>
+                    <small>In Use</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stats-card bg-warning text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-clock fa-2x mb-2"></i>
+                    <h4>{{ requisitioned_records }}</h4>
+                    <small>Requisitioned</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stats-card bg-danger text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                    <h4>{{ missing_records }}</h4>
+                    <small>Missing</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stats-card bg-secondary text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-building fa-2x mb-2"></i>
+                    <h4>{{ records_by_location|length }}</h4>
+                    <small>Locations</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Status Legend</h6>
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-success me-2">Available</span> Ready for requisition
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-info me-2">In Use</span> Currently with a user
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning me-2">Requisitioned</span> Requested but not handed over
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger me-2">Missing</span> Cannot be located
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Records by Location -->
+    {% for location, records in records_by_location.items %}
+    <div class="card location-card {% if location.location_type == 'RECORD_ROOM' %}record-room{% elif location.location_type == 'USER_DESK' %}user-desk{% else %}external-office{% endif %} mb-4">
+        <div class="card-header">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h5 class="mb-0">
+                        {% if location.location_type == 'RECORD_ROOM' %}
+                            <i class="fas fa-warehouse me-2"></i>
+                        {% elif location.location_type == 'USER_DESK' %}
+                            <i class="fas fa-desk me-2"></i>
+                        {% else %}
+                            <i class="fas fa-building me-2"></i>
+                        {% endif %}
+                        {{ location.name }}
+                    </h5>
+                    {% if location.custodian %}
+                        <small class="text-muted">
+                            Custodian: {{ location.custodian.user.get_full_name|default:location.custodian.user.username }}
+                            ({{ location.custodian.get_role_display }})
+                        </small>
+                    {% endif %}
+                </div>
+                <div class="col-auto">
+                    <span class="badge bg-primary">{{ records|length }} Record{{ records|length|pluralize }}</span>
+                    <span class="badge bg-secondary">{{ location.get_location_type_display }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if records %}
+                <div class="row">
+                    {% for record in records %}
+                    <div class="col-md-6 col-lg-4 mb-2">
+                        <div class="record-item {{ record.status|lower|cut:'_' }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <strong>{{ record.get_record_type_display }}</strong><br>
+                                    <small class="text-muted">{{ record.pensioner.employee_name }}</small><br>
+                                    <small class="text-muted">PPO: {{ record.pensioner.ppo_number }}</small>
+                                </div>
+                                <div class="text-end">
+                                    {% if record.status == 'AVAILABLE' %}
+                                        <span class="badge bg-success">Available</span>
+                                    {% elif record.status == 'IN_USE' %}
+                                        <span class="badge bg-info">In Use</span>
+                                    {% elif record.status == 'REQUISITIONED' %}
+                                        <span class="badge bg-warning">Requisitioned</span>
+                                    {% elif record.status == 'MISSING' %}
+                                        <span class="badge bg-danger">Missing</span>
+                                    {% elif record.status == 'NOT_APPLICABLE' %}
+                                        <span class="badge bg-secondary">N/A</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            {% comment %}
+                            Show additional info based on status
+                            {% endcomment %}
+                            {% if record.status == 'IN_USE' and location.custodian %}
+                                <div class="mt-1">
+                                    <small class="text-info">
+                                        <i class="fas fa-user me-1"></i>With: {{ location.custodian.user.get_full_name|default:location.custodian.user.username }}
+                                    </small>
+                                </div>
+                            {% endif %}
+                            
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>Updated: {{ record.updated_at|date:"M d, Y H:i" }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Location Summary -->
+                {% with location_available=records|dictsort:"status"|dictsortreversed:"status" %}
+                <div class="mt-3 p-2 bg-light rounded">
+                    <small class="text-muted">
+                        <strong>Location Summary:</strong>
+                        {% regroup records by status as status_groups %}
+                        {% for status_group in status_groups %}
+                            {{ status_group.list|length }} {{ status_group.grouper|title }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </small>
+                </div>
+                {% endwith %}
+            {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-inbox fa-2x mb-2"></i>
+                    <p>No records at this location</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not records_by_location %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-search fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">No Locations Found</h4>
+            <p class="text-muted">No record locations have been configured in the system yet.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons for Record Keepers -->
+    <div class="card bg-light mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Record Keeper Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="d-grid">
+                        <a href="{% url 'record_keeper_dashboard' %}" class="btn btn-primary">
+                            <i class="fas fa-tachometer-alt me-2"></i>Keeper Dashboard
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-warning" onclick="reportMissingRecord()">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Report Missing
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-info" onclick="markRecordFound()">
+                            <i class="fas fa-search me-2"></i>Mark Found
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-grid">
+                        <a href="{% url 'record_summary_report' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-chart-bar me-2"></i>Summary Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function refreshData() {
+    window.location.reload();
+}
+
+function reportMissingRecord() {
+    // This would open a modal or redirect to a form to report a missing record
+    alert('This feature will allow you to report a missing record. Implementation needed.');
+}
+
+function markRecordFound() {
+    // This would open a modal or redirect to a form to mark a missing record as found
+    alert('This feature will allow you to mark a missing record as found. Implementation needed.');
+}
+
+// Auto-refresh every 10 minutes
+setInterval(refreshData, 10 * 60 * 1000);
+
+// Print-friendly styles
+window.addEventListener('beforeprint', function() {
+    document.body.classList.add('printing');
+});
+
+window.addEventListener('afterprint', function() {
+    document.body.classList.remove('printing');
+});
+</script>
+
+<style>
+@media print {
+    .btn, .card-header button, .no-print {
+        display: none !important;
+    }
+    
+    .location-card {
+        page-break-inside: avoid;
+        margin-bottom: 20px !important;
+    }
+    
+    .record-item {
+        border: 1px solid #dee2e6 !important;
+        margin: 2px 0 !important;
+    }
+}
+</style>
+{% endblock %}
