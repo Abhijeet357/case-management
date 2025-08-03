@@ -317,8 +317,8 @@ $(document).ready(function() {
                     }
                     
                     if (nameField.length > 0) {
-                        if (data.name_pensioner && data.name_pensioner.trim()) {
-                            nameField.val(data.name_pensioner.trim());
+                        if (data.employee_name && data.employee_name.trim()) { // <-- THIS IS THE CORRECTED LINE
+                            nameField.val(data.employee_name.trim());
                             nameField.trigger('change');
                             updatedFields.push('Name: ' + data.name_pensioner);
                             nameField.addClass('field-updated');

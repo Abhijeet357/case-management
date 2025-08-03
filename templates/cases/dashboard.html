@@ -1,287 +1,168 @@
 {% extends 'base.html' %}
 {% load static %}
+
 {% block title %}Dashboard{% endblock %}
 
+{% block extra_css %}
+<style>
+    .task-card { transition: all 0.2s ease-in-out; border-left-width: 4px; }
+    .task-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .priority-High { border-left-color: #dc3545; }
+    .priority-Medium { border-left-color: #ffc107; }
+    .priority-Low { border-left-color: #198754; }
+    .stat-card { text-align: center; color: white; }
+</style>
+{% endblock %}
+
 {% block content %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+<div class="container-fluid">
+    <h2 class="mb-4">Dashboard</h2>
 
-<h2 class="mb-4">Dashboard</h2>
+    <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="my-tasks-tab" data-bs-toggle="tab" data-bs-target="#my-tasks" type="button" role="tab">
+                <i class="fas fa-user-check me-1"></i> My Action Items <span class="badge bg-danger ms-1">{{ my_own_tasks|length }}</span>
+            </button>
+        </li>
+        {% if has_subordinates %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="team-workflow-tab" data-bs-toggle="tab" data-bs-target="#team-workflow" type="button" role="tab">
+                <i class="fas fa-users me-1"></i> Team Workflow
+            </button>
+        </li>
+        {% endif %}
+        {% if show_overall_stats %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
+                <i class="fas fa-chart-pie me-1"></i> Overall Stats
+            </button>
+        </li>
+        {% endif %}
+    </ul>
 
-{% if show_overall %}
-  <!-- Filter Form -->
-  <form method="get" class="row g-3 mb-4 align-items-end" id="dashboard-filter-form">
-    <div class="col-md-2">
-      <label for="filter_period" class="form-label">Period</label>
-      <select class="form-select" name="period" id="filter_period">
-        <option value="">All Time</option>
-        <option value="today" {% if filter_period == 'today' %}selected{% endif %}>Today</option>
-        <option value="this_week" {% if filter_period == 'this_week' %}selected{% endif %}>This Week</option>
-        <option value="this_month" {% if filter_period == 'this_month' %}selected{% endif %}>This Month</option>
-        <option value="this_year" {% if filter_period == 'this_year' %}selected{% endif %}>This Year</option>
-        <option value="custom" {% if filter_period == 'custom' %}selected{% endif %}>Custom</option>
-      </select>
-    </div>
-    <div class="col-md-2 {% if filter_period == 'custom' %}d-block{% else %}d-none{% endif %}" id="custom-date-range">
-      <label for="start_date" class="form-label">From</label>
-      <input type="date" class="form-control" name="start_date" value="{{ start_date|default:'' }}">
-      <label for="end_date" class="form-label mt-2">To</label>
-      <input type="date" class="form-control" name="end_date" value="{{ end_date|default:'' }}">
-    </div>
-    <div class="col-md-2">
-      <label for="filter_case_type" class="form-label">Case Type</label>
-      <select class="form-select" name="case_type" id="filter_case_type">
-        <option value="">All</option>
-        {% for ct in case_types %}
-          <option value="{{ ct.id }}" {% if filter_case_type == ct.id|stringformat:"s" %}selected{% endif %}>{{ ct.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label for="filter_priority" class="form-label">Priority</label>
-      <select class="form-select" name="priority" id="filter_priority">
-        <option value="">All</option>
-        <option value="High" {% if filter_priority == 'High' %}selected{% endif %}>High</option>
-        <option value="Medium" {% if filter_priority == 'Medium' %}selected{% endif %}>Medium</option>
-        <option value="Low" {% if filter_priority == 'Low' %}selected{% endif %}>Low</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label for="filter_status" class="form-label">Status</label>
-      <select class="form-select" name="status" id="filter_status">
-        <option value="">All</option>
-        <option value="pending" {% if filter_status == 'pending' %}selected{% endif %}>Pending</option>
-        <option value="completed" {% if filter_status == 'completed' %}selected{% endif %}>Completed</option>
-        <option value="overdue" {% if filter_status == 'overdue' %}selected{% endif %}>Overdue</option>
-      </select>
-    </div>
-    <div class="col-md-2 d-flex gap-2">
-      <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel"></i> Filter</button>
-      <a href="{% url 'dashboard' %}" class="btn btn-secondary w-100"><i class="bi bi-x-circle"></i> Reset</a>
-    </div>
-  </form>
-
-  <!-- Export Buttons -->
-  <div class="mb-4">
-    <a href="{% url 'export_cases' format='csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success btn-sm me-2">
-      <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
-    </a>
-    <a href="{% url 'export_cases' format='xlsx' %}?{{ request.GET.urlencode }}" class="btn btn-outline-primary btn-sm me-2">
-      <i class="bi bi-file-earmark-excel"></i> Export Excel
-    </a>
-    <a href="{% url 'export_cases' format='pdf' %}?{{ request.GET.urlencode }}" class="btn btn-outline-danger btn-sm">
-      <i class="bi bi-file-earmark-pdf"></i> Export PDF
-    </a>
-  </div>
-
-  <!-- Summary Cards -->
-  <div class="row mb-4">
-    <div class="col-md-3">
-      <div class="card text-bg-primary mb-3">
-        <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-collection"></i> Total Cases</h5>
-          <p class="card-text fs-3">{{ total_cases }}</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-bg-warning mb-3">
-        <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-hourglass-split"></i> Pending</h5>
-          <p class="card-text fs-3">{{ pending_cases }}</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-bg-success mb-3">
-        <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-check-circle"></i> Completed</h5>
-          <p class="card-text fs-3">{{ completed_cases }}</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-bg-danger mb-3">
-        <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-exclamation-triangle"></i> Overdue</h5>
-          <p class="card-text fs-3">{{ overdue_cases }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Priority Distribution Chart -->
-  <div class="row mb-4">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-secondary text-white">
-          <h5>Priority Distribution</h5>
-        </div>
-        <div class="card-body">
-          <div class="progress mb-2">
-            <div class="progress-bar bg-danger" role="progressbar" style="width: {% widthratio high_priority total_cases 100 %}%" aria-valuenow="{{ high_priority }}" aria-valuemin="0" aria-valuemax="{{ total_cases }}">
-              High ({{ high_priority }})
-            </div>
-          </div>
-          <div class="progress mb-2">
-            <div class="progress-bar bg-warning" role="progressbar" style="width: {% widthratio medium_priority total_cases 100 %}%" aria-valuenow="{{ medium_priority }}" aria-valuemin="0" aria-valuemax="{{ total_cases }}">
-              Medium ({{ medium_priority }})
-            </div>
-          </div>
-          <div class="progress">
-            <div class="progress-bar bg-success" role="progressbar" style="width: {% widthratio low_priority total_cases 100 %}%" aria-valuenow="{{ low_priority }}" aria-valuemin="0" aria-valuemax="{{ total_cases }}">
-              Low ({{ low_priority }})
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-secondary text-white">
-          <h5>Cases by Stage</h5>
-        </div>
-        <div class="card-body">
-          {% for stage, count in stage_stats.items %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="badge bg-info">{{ stage }}</span>
-              <span class="fw-bold">{{ count }} cases</span>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cases Table -->
-  <div class="card mb-4">
-    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-      <h4 class="mb-0">Filtered Cases</h4>
-      <small>Showing {{ filtered_cases|length }} of {{ total_cases }} cases</small>
-    </div>
-    <div class="card-body table-responsive">
-      <table class="table table-striped table-hover align-middle">
-        <thead class="table-dark">
-          <tr>
-            <th>Case ID</th>
-            <th>Title</th>
-            <th>Type</th>
-            <th>Priority</th>
-            <th>Status</th>
-            <th>Current Holder</th>
-            <th>Stage</th>
-            <th>Registered</th>
-            <th>Expected Completion</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for case in filtered_cases %}
-            <tr>
-              <td><strong>{{ case.case_id }}</strong></td>
-              <td>{{ case.case_title|truncatechars:30 }}</td>
-              <td><span class="badge bg-light text-dark">{{ case.case_type.name }}</span></td>
-              <td>
-                <span class="badge 
-                  {% if case.priority == 'High' %}bg-danger
-                  {% elif case.priority == 'Medium' %}bg-warning text-dark
-                  {% else %}bg-success
-                  {% endif %}">
-                  {{ case.priority }}
-                </span>
-              </td>
-              <td>
-                <span class="badge 
-                  {% if case.is_completed %}bg-success
-                  {% elif case.expected_completion and case.expected_completion < now %}bg-danger
-                  {% else %}bg-warning text-dark
-                  {% endif %}">
-                  {% if case.is_completed %}Completed
-                  {% elif case.expected_completion and case.expected_completion < now %}Overdue
-                  {% else %}Pending
-                  {% endif %}
-                </span>
-              </td>
-              <td>{{ case.current_holder.user.get_full_name|default:case.current_holder.user.username }}</td>
-              <td><span class="badge bg-primary">{{ case.current_holder.role }}</span></td>
-              <td>{{ case.registration_date|date:"d-m-Y" }}</td>
-              <td>
-                {% if case.expected_completion %}
-                  {{ case.expected_completion|date:"d-m-Y" }}
-                  {% if case.expected_completion < now and not case.is_completed %}
-                    <i class="bi bi-exclamation-triangle text-danger" title="Overdue"></i>
-                  {% endif %}
+    <div class="tab-content" id="dashboardTabsContent">
+        <div class="tab-pane fade show active" id="my-tasks" role="tabpanel">
+            <div class="py-4">
+                {% if my_own_tasks %}
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                        {% for task in my_own_tasks %}
+                        <div class="col">
+                            <div class="card h-100 task-card priority-{{ task.priority }}">
+                                <div class="card-header d-flex justify-content-between"><span>{{ task.title }}</span></div>
+                                <div class="card-body"><p class="card-text">{{ task.description }}</p></div>
+                                <div class="card-footer bg-white border-top-0 text-end">
+                                    {% if task.type == 'case' %}<a href="{% url 'case_detail' task.object.case_id %}" class="btn btn-primary btn-sm">View Case</a>
+                                    {% elif task.type == 'grievance' %}<a href="{% url 'take_grievance_action' task.object.grievance_id %}" class="btn btn-danger btn-sm">Take Action</a>
+                                    {% elif task.type == 'approval' %}<a href="#" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#approvalModal" data-req-id="{{ task.object.id }}" data-action="approve">Approve</a> <a href="#" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#approvalModal" data-req-id="{{ task.object.id }}" data-action="reject">Reject</a>
+                                    {% elif task.type == 'handover' %}<a href="#" class="btn btn-warning btn-sm text-dark" data-bs-toggle="modal" data-bs-target="#handoverModal" data-req-id="{{ task.object.id }}">Handover</a>
+                                    {% elif task.type == 'acknowledgment' %}<a href="#" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#acknowledgeModal" data-req-id="{{ task.object.id }}">Acknowledge</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 {% else %}
-                  <span class="text-muted">Not set</span>
+                    <div class="text-center py-5"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><h4>You have no pending action items.</h4></div>
                 {% endif %}
-              </td>
-              <td>
-                <a href="{% url 'case_detail' case.case_id %}" class="btn btn-sm btn-outline-primary">
-                  <i class="bi bi-eye"></i> View
-                </a>
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="10" class="text-center text-muted py-4">
-                <i class="bi bi-inbox fs-1"></i><br>
-                No cases found for the selected filters.
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-{% endif %}
-
-<!-- My Cases (for all users) -->
-<div class="card">
-  <div class="card-header bg-success text-white">
-    <h4 class="mb-0"><i class="bi bi-person-check"></i> My Pending Cases</h4>
-  </div>
-  <div class="card-body">
-    {% if my_cases %}
-      <div class="list-group list-group-flush">
-        {% for case in my_cases %}
-          <div class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-              <h6 class="mb-1">
-                <a href="{% url 'case_detail' case.case_id %}" class="text-decoration-none">
-                  {{ case.case_id }} - {{ case.case_title }}
-                </a>
-              </h6>
-              <small class="text-muted">{{ case.case_type.name }} | Registered: {{ case.registration_date|date:"d-m-Y" }}</small>
             </div>
-            <span class="badge 
-              {% if case.priority == 'High' %}bg-danger
-              {% elif case.priority == 'Medium' %}bg-warning text-dark
-              {% else %}bg-success
-              {% endif %}">
-              {{ case.priority }}
-            </span>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <div class="text-center text-muted py-4">
-        <i class="bi bi-check-circle fs-1"></i><br>
-        No pending cases assigned to you.
-      </div>
-    {% endif %}
-  </div>
+        </div>
+
+        <div class="tab-pane fade" id="team-workflow" role="tabpanel">
+            <div class="py-4">
+                <h5>Pending Tasks with Subordinates (Summary)</h5>
+                <ul class="list-group mb-4">
+                    {% for assignee, count in team_summary.items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ assignee }}
+                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item">Your team has no pending tasks.</li>
+                    {% endfor %}
+                </ul>
+
+                {% if is_senior_officer and team_detailed_tasks %}
+                    <hr>
+                    <h5>Detailed View</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead><tr><th>Item Type</th><th>ID</th><th>Assigned To</th><th>Action</th></tr></thead>
+                            <tbody>
+                                {% for task in team_detailed_tasks %}
+                                <tr>
+                                    <td>{{ task.type }}</td>
+                                    <td>
+                                        {% if task.type == 'Case' %}
+                                            {{ task.object.case_id }}
+                                        {% elif task.type == 'Grievance' %}
+                                            {{ task.object.grievance_id }}
+                                        {% endif %}
+                                        </td>
+                                    <td>{{ task.holder.user.username }} ({{ task.holder.role }})</td>
+                                    <td>
+                                        {% if task.type == 'Case' %}
+                                            <a href="{% url 'case_detail' task.object.case_id %}" class="btn btn-sm btn-outline-secondary">View Case</a>
+                                        {% elif task.type == 'Grievance' %}
+                                            <a href="{% url 'take_grievance_action' task.object.grievance_id %}" class="btn btn-sm btn-outline-secondary">View Grievance</a>
+                                        {% endif %}
+                                        </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="stats" role="tabpanel">
+             <div class="py-4">
+                <div class="row mb-4">
+                    <div class="col-md-4"><div class="card bg-primary text-white text-center"><div class="card-body"><h4>{{ total_cases_stats }}</h4><p class="mb-0">Total Cases</p></div></div></div>
+                    <div class="col-md-4"><div class="card bg-warning text-dark text-center"><div class="card-body"><h4>{{ pending_cases_stats }}</h4><p class="mb-0">Pending</p></div></div></div>
+                    <div class="col-md-4"><div class="card bg-danger text-white text-center"><div class="card-body"><h4>{{ overdue_cases_stats }}</h4><p class="mb-0">Overdue</p></div></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
+<div class="modal fade" id="approvalModal" tabindex="-1"><div class="modal-dialog"><form id="approvalForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="approvalModalTitle">Confirm</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p id="approvalModalText">Are you sure?</p><input type="hidden" name="action" id="approvalActionInput"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn" id="approvalSubmitBtn">Confirm</button></div></div></form></div></div>
+<div class="modal fade" id="handoverModal" tabindex="-1"><div class="modal-dialog"><form id="handoverForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title">Confirm Handover</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Confirm you are physically handing over the records.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-warning text-dark">Confirm</button></div></div></form></div></div>
+<div class="modal fade" id="acknowledgeModal" tabindex="-1"><div class="modal-dialog"><form id="acknowledgeForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title">Acknowledge Return</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Confirm you have physically received the returned records.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-info">Acknowledge</button></div></div></form></div></div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-  // Show/hide custom date range using Bootstrap classes
-  document.getElementById('filter_period').addEventListener('change', function() {
-    const customDateRange = document.getElementById('custom-date-range');
-    if (this.value === 'custom') {
-      customDateRange.classList.remove('d-none');
-      customDateRange.classList.add('d-block');
-    } else {
-      customDateRange.classList.remove('d-block');
-      customDateRange.classList.add('d-none');
-    }
-  });
+$(document).ready(function() {
+    // Logic for the action modals (This code is correct and doesn't need changes)
+    $('#approvalModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget);
+        var reqId = button.data('req-id');
+        var action = button.data('action');
+        var url = "/records/requisition/" + reqId + "/action/";
+        var modal = $(this);
+        modal.find('#approvalForm').attr('action', url);
+        modal.find('#approvalActionInput').val(action);
+        if (action === 'approve') {
+            modal.find('#approvalModalTitle').text('Confirm Approval');
+            modal.find('#approvalModalText').text('Are you sure you want to approve this request?');
+            modal.find('#approvalSubmitBtn').removeClass('btn-danger').addClass('btn-success').text('Approve');
+        } else {
+            modal.find('#approvalModalTitle').text('Confirm Rejection');
+            modal.find('#approvalModalText').text('Are you sure you want to reject this request?');
+            modal.find('#approvalSubmitBtn').removeClass('btn-success').addClass('btn-danger').text('Reject');
+        }
+    });
+    $('#handoverModal').on('show.bs.modal', function (event) {
+        var reqId = $(event.relatedTarget).data('req-id');
+        $(this).find('#handoverForm').attr('action', "/records/requisition/" + reqId + "/handover/");
+    });
+    $('#acknowledgeModal').on('show.bs.modal', function (event) {
+        var reqId = $(event.relatedTarget).data('req-id');
+        $(this).find('#acknowledgeForm').attr('action', "/records/requisition/" + reqId + "/acknowledge-return/");
+    });
+});
 </script>
 {% endblock %}

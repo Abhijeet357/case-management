@@ -19,106 +19,122 @@ from .forms import CaseRegistrationForm,CaseMovementForm, UserRegistrationForm, 
 from .forms import RecordRequisitionForm, RecordReturnForm
 from .forms import GrievanceRegistrationForm, GrievanceActionForm
 from .models import Grievance, PPOMaster, get_subordinate_roles
+from collections import defaultdict
 
 @login_required
 def dashboard(request):
     """
-    A unified, task-oriented dashboard for all users using the correct role hierarchy.
+    A unified, role-aware dashboard with separate tabs for personal tasks and team workflow.
     """
     user_profile = get_object_or_404(UserProfile, user=request.user)
-    task_list = []
+    now = timezone.now()
 
-    # 1. Get pending cases based on role hierarchy
-    subordinate_roles = get_subordinate_roles(user_profile.role)
-    roles_to_view = subordinate_roles + [user_profile.role]
+    # ==========================================================================
+    # 1. LOGIC FOR THE "MY ACTION ITEMS" TAB
+    # This list will ONLY contain tasks assigned directly to the logged-in user.
+    # ==========================================================================
+    my_own_tasks = []
     
-    if user_profile.role == 'ADMIN':
-        my_pending_cases = Case.objects.filter(is_completed=False)
-    else:
-        my_pending_cases = Case.objects.filter(
-            current_holder__role__in=roles_to_view, 
-            is_completed=False
-        )
-
+    # Direct cases
+    my_pending_cases = Case.objects.filter(current_holder=user_profile, is_completed=False)
     for case in my_pending_cases:
-        task_list.append({
-            'type': 'case', 'title': f'Action on Case: {case.case_id}',
-            'description': f'{case.case_title} (Holder: {case.current_holder.user.username})', 
-            'object': case, 'date': case.last_update_date, 'priority': case.priority,
-        })
+        my_own_tasks.append({'type': 'case', 'title': f'Action on Case: {case.case_id}', 'description': case.case_title, 'object': case, 'date': case.last_update_date, 'priority': case.priority})
 
-    # 2. Get pending record approvals (for AAOs)
+    # Direct grievances
+    my_new_grievances = Grievance.objects.filter(status='NEW', assigned_to=user_profile)
+    for grievance in my_new_grievances:
+        my_own_tasks.append({'type': 'grievance', 'title': f'New Grievance: {grievance.grievance_id}', 'description': f'From: {grievance.complainant_name}', 'object': grievance, 'date': grievance.date_received, 'priority': 'High'})
+
+    # Approval tasks for AAOs
     if user_profile.role == 'AAO':
-        pending_approvals = RecordRequisition.objects.filter(
-            models.Q(status='PENDING_APPROVAL') | models.Q(status='RETURN_REQUESTED'),
-            approving_aao=user_profile
-        ).select_related('case')
+        pending_approvals = RecordRequisition.objects.filter(Q(status='PENDING_APPROVAL') | Q(status='RETURN_REQUESTED'), approving_aao=user_profile)
         for req in pending_approvals:
-            req_type = "New Requisition" if req.status == 'PENDING_APPROVAL' else "Return Request"
-            task_list.append({
-                'type': 'approval', 'title': f'Approval for {req_type}',
-                'description': f'For Case: {req.case.case_id}', 'object': req,
-                'date': req.created_at, 'priority': 'Medium',
-            })
+            my_own_tasks.append({'type': 'approval', 'title': 'Approval Request', 'description': f'For Case: {req.case.case_id}', 'object': req, 'date': req.created_at, 'priority': 'Medium'})
 
-    # 3. Get pending actions for Record Keepers
+    # Handover/Acknowledge tasks for Record Keepers
     if user_profile.is_record_keeper:
-        pending_handovers = RecordRequisition.objects.filter(status='APPROVED').select_related('case')
+        pending_handovers = RecordRequisition.objects.filter(status='APPROVED')
         for req in pending_handovers:
-            task_list.append({
-                'type': 'handover', 'title': 'Pending Handover',
-                'description': f'For Case: {req.case.case_id}', 'object': req,
-                'date': req.updated_at, 'priority': 'High',
-            })
-        pending_acks = RecordRequisition.objects.filter(status='RETURN_APPROVED').select_related('case')
+            my_own_tasks.append({'type': 'handover', 'title': 'Pending Handover', 'description': f'For Case: {req.case.case_id}', 'object': req, 'date': req.updated_at, 'priority': 'High'})
+        pending_acks = RecordRequisition.objects.filter(status='RETURN_APPROVED')
         for req in pending_acks:
-            task_list.append({
-                'type': 'acknowledgment', 'title': 'Acknowledge Return',
-                'description': f'For Case: {req.case.case_id}', 'object': req,
-                'date': req.updated_at, 'priority': 'Medium',
-            })
+            my_own_tasks.append({'type': 'acknowledgment', 'title': 'Acknowledge Return', 'description': f'For Case: {req.case.case_id}', 'object': req, 'date': req.updated_at, 'priority': 'Medium'})
 
-    # 4. Get new grievances that need action
-    if user_profile.role == 'ADMIN':
-        new_grievances = Grievance.objects.filter(status='NEW', generated_case__isnull=True)
-    else:
-        # A user sees grievances assigned to them or their subordinates
-        new_grievances = Grievance.objects.filter(status='NEW', generated_case__isnull=True, assigned_to__role__in=roles_to_view)
+    # Convert grievance dates to aware datetimes before sorting
+    for task in my_own_tasks:
+        if isinstance(task['date'], date) and not isinstance(task['date'], datetime):
+            naive_dt = datetime.combine(task['date'], datetime.min.time())
+            task['date'] = timezone.make_aware(naive_dt)
+            
+    my_own_tasks.sort(key=lambda x: x['date'], reverse=True)
 
-    for grievance in new_grievances:
-        aware_datetime = timezone.make_aware(datetime.combine(grievance.date_received, time.min))
-        task_list.append({
-            'type': 'grievance', 'title': f'New Grievance: {grievance.grievance_id}',
-            'description': f'From: {grievance.complainant_name} for {grievance.pensioner.employee_name}',
-            'object': grievance, 'date': aware_datetime, 'priority': 'High',
-        })
 
-    # 5. Sort all tasks by date
-    task_list.sort(key=lambda x: x['date'], reverse=True)
+    # ==========================================================================
+    # 2. LOGIC FOR THE "TEAM WORKFLOW" TAB
+    # This section calculates a summary and a detailed list of subordinate tasks.
+    # ==========================================================================
+    subordinate_roles = get_subordinate_roles(user_profile.role)
+    team_summary = defaultdict(int)
+    team_detailed_tasks = []
+
+    if subordinate_roles:
+        subordinate_profiles = UserProfile.objects.filter(role__in=subordinate_roles)
+        for sub_profile in subordinate_profiles:
+            # Count cases for summary
+            case_count = Case.objects.filter(current_holder=sub_profile, is_completed=False).count()
+            if case_count > 0:
+                team_summary[f'Cases with {sub_profile.user.username} ({sub_profile.role})'] += case_count
+            
+            # Count grievances for summary
+            grievance_count = Grievance.objects.filter(assigned_to=sub_profile, status='NEW').count()
+            if grievance_count > 0:
+                team_summary[f'Grievances with {sub_profile.user.username} ({sub_profile.role})'] += grievance_count
+
+        # For AO and above, get a detailed list of all subordinate tasks
+        if user_profile.role in ['AO', 'Dy.CCA', 'Jt.CCA', 'CCA', 'Pr.CCA', 'ADMIN']:
+            team_cases = Case.objects.filter(current_holder__role__in=subordinate_roles, is_completed=False)
+            for case in team_cases:
+                team_detailed_tasks.append({'type': 'Case', 'object': case, 'holder': case.current_holder})
+            
+            team_grievances = Grievance.objects.filter(assigned_to__role__in=subordinate_roles, status='NEW')
+            for grievance in team_grievances:
+                team_detailed_tasks.append({'type': 'Grievance', 'object': grievance, 'holder': grievance.assigned_to})
+
+
+    # ==========================================================================
+    # 3. LOGIC FOR "OVERALL STATS" TAB
+    # This remains unchanged, providing high-level stats.
+    # ==========================================================================
+    stats_cases = Case.objects.all() # Start with all cases
+    # Filter by hierarchy for non-admins
+    if user_profile.role != 'ADMIN':
+        roles_to_view_stats = subordinate_roles + [user_profile.role]
+        stats_cases = stats_cases.filter(current_holder__role__in=roles_to_view_stats)
     
-    # --- Statistical Overview ---
-    if user_profile.role == 'ADMIN':
-        all_cases_for_stats = Case.objects.all()
-    else:
-        all_cases_for_stats = Case.objects.filter(current_holder__role__in=roles_to_view)
-    
-    total_cases = all_cases_for_stats.count()
-    pending_cases_count = all_cases_for_stats.filter(is_completed=False).count()
-    overdue_cases_count = all_cases_for_stats.filter(is_completed=False, expected_completion__lt=timezone.now()).count()
-    
-    my_held_records = []
-    try:
-        user_desk = Location.objects.get(custodian=user_profile, location_type='USER_DESK')
-        my_held_records = Record.objects.filter(current_location=user_desk, status='IN_USE')
-    except Location.DoesNotExist:
-        pass
+    total_cases_stats = stats_cases.count()
+    pending_cases_stats = stats_cases.filter(is_completed=False).count()
+    overdue_cases_stats = stats_cases.filter(is_completed=False, expected_completion__lt=now).count()
 
+    # ==========================================================================
+    # 4. FINAL CONTEXT
+    # ==========================================================================
     context = {
-        'user_profile': user_profile, 'task_list': task_list,
-        'total_cases': total_cases, 'pending_cases_count': pending_cases_count,
-        'overdue_cases_count': overdue_cases_count, 'my_held_records': my_held_records,
+        'my_own_tasks': my_own_tasks,
+        'team_summary': dict(team_summary),
+        'team_detailed_tasks': team_detailed_tasks,
+        'has_subordinates': bool(subordinate_roles),
+        'is_senior_officer': user_profile.role in ['AO', 'Dy.CCA', 'Jt.CCA', 'CCA', 'Pr.CCA', 'ADMIN'],
+        
+        # Stats context
+        'show_overall_stats': user_profile.role != 'DH',
+        'total_cases_stats': total_cases_stats,
+        'pending_cases_stats': pending_cases_stats,
+        'overdue_cases_stats': overdue_cases_stats,
+        
+        # Other context
+        'user_profile': user_profile,
     }
-    return render(request, 'cases/dashboard_interactive.html', context)
+    return render(request, 'cases/dashboard.html', context)
 
 @login_required
 def case_list(request):
@@ -183,28 +199,42 @@ def case_list(request):
 
 @login_required
 def case_detail(request, case_id):
-    """View case details and movement history"""
+    """
+    View case details, movement history, and milestone progress.
+    Includes hierarchical permission check.
+    """
     case = get_object_or_404(Case, case_id=case_id)
     user_profile = get_object_or_404(UserProfile, user=request.user)
     
-    # Check permissions
-    if user_profile.role != 'ADMIN' and case.current_holder != user_profile:
-        messages.error(request, "You don't have permission to view this case.")
-        return redirect('case_list')
-    
-    # Get movement history
+    # --- PERMISSION LOGIC IS HERE ---
+    # Get the roles subordinate to the currently logged-in user.
+    subordinate_roles = get_subordinate_roles(user_profile.role)
+
+    # A user can view a case if:
+    # 1. They are an ADMIN.
+    # 2. The case is currently assigned to them.
+    # 3. The case is assigned to someone in their subordinate hierarchy.
+    can_view = (
+        user_profile.role == 'ADMIN' or
+        case.current_holder == user_profile or
+        case.current_holder.role in subordinate_roles
+    )
+
+    if not can_view:
+        messages.error(request, "You do not have permission to view this case.")
+        return redirect('dashboard')
+    # --- END OF PERMISSION LOGIC ---
+        
+    # Fetch related data
     movements = CaseMovement.objects.filter(case=case).order_by('-movement_date')
-    
-    # Get workflow information
-    workflow = get_workflow_for_case(case)
-    current_stage_index = get_current_stage_index(case, workflow)
-    
+    milestone_progress = CaseMilestoneProgress.objects.filter(case=case).select_related('milestone')
+
     context = {
         'case': case,
         'movements': movements,
-        'workflow': workflow,
-        'current_stage_index': current_stage_index,
+        'milestone_progress': milestone_progress, # Pass milestone data to the template
         'user_profile': user_profile,
+        'now': timezone.now(), # Pass current time for overdue checks
     }
     
     return render(request, 'cases/case_detail.html', context)
@@ -414,19 +444,17 @@ def get_ppo_data(request):
         
         # Prepare data - handle null values gracefully
         data = {
-            'success': True,
-            'data': {
-                'name_pensioner': ppo_master.employee_name.strip() if ppo_master.employee_name else '',
-                'pensioner_type': getattr(ppo_master, 'type_of_pensioner', ''),
-                'date_of_retirement': formatted_retirement_date,
-                'mobile_number': ppo_master.mobile_number.strip() if ppo_master.mobile_number else '',
-                'pension_type': getattr(ppo_master, 'pension_type', ''),
-                'date_of_death': formatted_death_date,
-            }
+            'employee_name': ppo_master.employee_name or '',
+            'mobile_number': ppo_master.mobile_number or '',
+            'pensioner_type': getattr(ppo_master, 'pensioner_type', ''),
+            'pension_type': getattr(ppo_master, 'pension_type', ''),
+            'date_of_retirement': formatted_retirement_date,
+            'date_of_death': formatted_death_date,
         }
         
         print(f"DEBUG: Returning data: {data}")
-        return JsonResponse(data)
+        
+        return JsonResponse({'success': True, 'data': data})
         
     except PPOMaster.DoesNotExist:
         print(f"DEBUG: PPO number '{ppo_number}' not found in database")

@@ -1018,21 +1018,25 @@ class Grievance(models.Model):
 
     grievance_id = models.CharField(max_length=50, unique=True, db_index=True, help_text="A unique ID for the grievance.")
     pensioner = models.ForeignKey(PPOMaster, on_delete=models.PROTECT, related_name='grievances', help_text="The pensioner this grievance relates to.")
-    
     complainant_name = models.CharField(max_length=200)
     complainant_contact = models.CharField(max_length=100, blank=True, help_text="Phone number or email address.")
-    
     mode_of_receipt = models.ForeignKey('GrievanceMode', on_delete=models.PROTECT, help_text="How the grievance was received.")
-    
     grievance_text = models.TextField(help_text="The full text of the complaint.")
     date_received = models.DateField(default=timezone.now)
-    
     status = models.CharField(max_length=20, choices=GRIEVANCE_STATUS_CHOICES, default='NEW')
     disposal_type = models.CharField(max_length=20, choices=DISPOSAL_TYPE_CHOICES, null=True, blank=True)
     reply_details = models.TextField(blank=True, help_text="Details of the interim or final reply provided.")
     date_disposed = models.DateField(null=True, blank=True)
-
     generated_case = models.OneToOneField('Case', on_delete=models.SET_NULL, null=True, blank=True, related_name='source_grievance')
+        # THIS FIELD WAS ADDED TO FIX THE DASHBOARD ERROR
+    assigned_to = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_grievances',
+        help_text="The user this grievance is currently assigned to."
+    )
 
     history = HistoricalRecords()
 

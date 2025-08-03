@@ -461,60 +461,56 @@ class RecordReturnForm(forms.ModelForm):
             instance.records_requested.set(self.cleaned_data['records_to_return'])
         return instance
     
+# cases/forms.py
+
 class GrievanceRegistrationForm(forms.ModelForm):
     """
-    Form for registering a new grievance with PPO data fetching.
+    Updated form to include all display fields fetched from PPOMaster.
     """
     ppo_number = forms.CharField(
         label="Pensioner's PPO Number",
-        help_text="Enter the PPO number and click 'Fetch' to load pensioner details."
+        help_text="Enter the PPO number to load details."
+    )
+    
+    # New read-only fields to display fetched data
+    pensioner_type = forms.CharField(required=False, widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+    date_of_retirement = forms.CharField(required=False, widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+    pension_type = forms.CharField(required=False, widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+    date_of_death = forms.CharField(required=False, widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+    registered_contact = forms.CharField(label="Registered Contact", required=False, widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+
+    # Existing fields
+    complainant_contact = forms.CharField(label="Current Contact Number", required=False)
+    assigned_to = forms.ModelChoiceField(
+        queryset=UserProfile.objects.filter(role='DH', is_active_holder=True),
+        label="Assign To",
+        required=True
     )
 
     class Meta:
         model = Grievance
+        # The 'fields' list now includes only the fields that need to be saved to the database.
+        # The new display-only fields are handled separately.
         fields = [
             'ppo_number', 'complainant_name', 'complainant_contact',
-            'mode_of_receipt', 'date_received', 'grievance_text'
+            'mode_of_receipt', 'date_received', 'assigned_to', 'grievance_text'
         ]
         widgets = {
             'date_received': forms.DateInput(attrs={'type': 'date'}),
             'grievance_text': forms.Textarea(attrs={'rows': 4}),
-            # Make fields read-only initially; they will be enabled by JavaScript.
             'complainant_name': forms.TextInput(attrs={'readonly': True}),
-            'complainant_contact': forms.TextInput(attrs={'readonly': True}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         self.fields['mode_of_receipt'].queryset = GrievanceMode.objects.filter(is_active=True)
-        self.fields['mode_of_receipt'].empty_label = "Select a Mode..."
-
-        self.helper = FormHelper()
-        self.helper.form_method = 'post'
-        # This layout defines the entire form, including the buttons.
-        # It requires the {% crispy %} tag in the template to render correctly.
-        self.helper.layout = Layout(
-            AppendedText('ppo_number', '<button type="button" class="btn btn-info" id="fetch-ppo-details-btn">Fetch</button>'),
-            'complainant_name',
-            'complainant_contact',
-            'mode_of_receipt',
-            'date_received',
-            'grievance_text',
-            # Explicitly add the submit button to the layout
-            Submit('submit', 'Register Grievance', css_class='btn btn-primary mt-4')
-        )
+        self.pensioner_object = None
 
     def clean_ppo_number(self):
-        """
-        Custom validation to ensure the entered PPO number exists in the database.
-        """
         ppo_number_str = self.cleaned_data.get('ppo_number')
         if ppo_number_str:
             try:
-                pensioner = PPOMaster.objects.get(ppo_number=ppo_number_str)
-                # Attach the found object to the form for the view to use
-                self.pensioner_object = pensioner
+                self.pensioner_object = PPOMaster.objects.get(ppo_number=ppo_number_str)
                 return ppo_number_str
             except PPOMaster.DoesNotExist:
                 raise forms.ValidationError("No pensioner found with this PPO number.")
