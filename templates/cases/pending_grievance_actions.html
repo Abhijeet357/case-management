@@ -1,0 +1,139 @@
+<!-- Create: templates/cases/pending_grievance_actions.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Pending Grievance Actions{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-clock me-2"></i>Pending Grievance Actions</h2>
+        <a href="{% url 'register_grievance' %}" class="btn btn-danger">
+            <i class="fas fa-plus-circle me-1"></i> Register New Grievance
+        </a>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-8">
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search by Grievance ID, PPO Number, Complainant Name..." 
+                           value="{{ search_query }}">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i> Search
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results -->
+    {% if page_obj %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Pending Actions ({{ page_obj.paginator.count }} total)</h5>
+                <small class="text-muted">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</small>
+            </div>
+            <div class="card-body">
+                {% if page_obj.object_list %}
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                        {% for grievance in page_obj %}
+                        <div class="col">
+                            <div class="card h-100 border-danger">
+                                <div class="card-header bg-danger text-white d-flex justify-content-between">
+                                    <strong>{{ grievance.grievance_id }}</strong>
+                                    <span class="badge bg-light text-dark">NEW</span>
+                                </div>
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ grievance.pensioner.employee_name|default:"Unknown Pensioner" }}</h6>
+                                    <p class="card-text small">
+                                        <strong>PPO:</strong> {{ grievance.pensioner.ppo_number|default:"N/A" }}<br>
+                                        <strong>From:</strong> {{ grievance.complainant_name }}<br>
+                                        <strong>Received:</strong> {{ grievance.date_received|date:"d M Y" }}<br>
+                                        <strong>Mode:</strong> {{ grievance.mode_of_receipt.name }}
+                                    </p>
+                                    <p class="card-text text-muted">
+                                        {{ grievance.grievance_text|truncatewords:15 }}
+                                    </p>
+                                    
+                                    <!-- Days pending indicator -->
+                                    {% with days_pending=grievance.date_received|timesince %}
+                                    <div class="mb-2">
+                                        {% if "day" in days_pending %}
+                                            {% if "1 day" in days_pending or "2 day" in days_pending or "3 day" in days_pending %}
+                                                <span class="badge bg-warning text-dark">{{ days_pending }} pending</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">{{ days_pending }} pending</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-info">{{ days_pending }} pending</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endwith %}
+                                </div>
+                                <div class="card-footer text-center">
+                                    <a href="{% url 'take_grievance_action' grievance.grievance_id %}" 
+                                       class="btn btn-danger">
+                                        <i class="fas fa-play-circle me-1"></i> Take Action
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Page navigation" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}">First</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">Previous</a>
+                                </li>
+                            {% endif %}
+
+                            <li class="page-item active">
+                                <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                            </li>
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">Next</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}">Last</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <h4>No pending actions found!</h4>
+                        {% if search_query %}
+                            <p>No grievances match your search criteria.</p>
+                            <a href="{% url 'pending_grievance_actions' %}" class="btn btn-secondary">Clear Search</a>
+                        {% else %}
+                            <p>All grievances have been processed.</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-info-circle fa-3x text-info mb-3"></i>
+            <h4>No grievances require action</h4>
+            <p>All grievances have been processed.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

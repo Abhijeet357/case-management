@@ -1,0 +1,332 @@
+<!-- Create: templates/cases/reports_dashboard.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Reports Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* This CSS helps create visual hierarchy in our reports */
+.report-card {
+    transition: transform 0.2s ease-in-out;
+    border-radius: 10px;
+}
+
+.report-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.metric-card {
+    background: linear-gradient(135deg, var(--bs-primary), var(--bs-primary-dark));
+    color: white;
+    border-radius: 15px;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    margin: 20px 0;
+}
+
+.report-section {
+    border-left: 4px solid var(--bs-primary);
+    padding-left: 20px;
+    margin-bottom: 30px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section: Sets the context for what this dashboard does -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-chart-line me-2 text-primary"></i>Reports Dashboard</h2>
+            <p class="text-muted mb-0">Comprehensive insights into system performance and operations</p>
+        </div>
+        <div>
+            <span class="badge bg-info">Role: {{ user_role }}</span>
+            <small class="text-muted ms-2">Generated: {{ "now"|date:"d M Y, H:i" }}</small>
+        </div>
+    </div>
+
+    <!-- Key Performance Indicators: The most important numbers at a glance -->
+    <div class="report-section">
+        <h4 class="text-primary mb-3">Key Performance Indicators</h4>
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-alt fa-2x mb-2"></i>
+                        <h3>{{ total_cases }}</h3>
+                        <p class="mb-0">Total Cases</p>
+                        <small class="opacity-75">System lifetime</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card h-100" style="background: linear-gradient(135deg, #28a745, #20c997);">
+                    <div class="card-body text-center">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i>
+                        <h3>{{ completed_this_month }}</h3>
+                        <p class="mb-0">Completed This Month</p>
+                        <small class="opacity-75">Current performance</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card h-100" style="background: linear-gradient(135deg, #ffc107, #fd7e14);">
+                    <div class="card-body text-center">
+                        <i class="fas fa-clock fa-2x mb-2"></i>
+                        <h3>{{ pending_cases }}</h3>
+                        <p class="mb-0">Pending Cases</p>
+                        <small class="opacity-75">Need attention</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card h-100" style="background: linear-gradient(135deg, #dc3545, #e83e8c);">
+                    <div class="card-body text-center">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                        <h3>{{ new_grievances }}</h3>
+                        <p class="mb-0">New Grievances</p>
+                        <small class="opacity-75">Require action</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Performance Metric: Average completion time tells us about efficiency -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card border-info">
+                    <div class="card-body text-center">
+                        <h5 class="card-title text-info">Average Case Completion Time</h5>
+                        <h2 class="text-primary">{{ avg_completion_days }} days</h2>
+                        <p class="text-muted mb-0">Based on completed cases</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Categories: Different types of reports for different management needs -->
+    <div class="report-section">
+        <h4 class="text-primary mb-3">Available Reports</h4>
+        <div class="row g-4">
+            
+            <!-- Operational Reports: For day-to-day management -->
+            <div class="col-md-6">
+                <div class="card report-card h-100 border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Operational Reports</h5>
+                        <small>Daily management and workflow optimization</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'case_aging_report' %}" class="btn btn-outline-warning">
+                                <i class="fas fa-hourglass-half me-2"></i>Case Aging Analysis
+                                <small class="d-block text-muted">See which cases are taking too long</small>
+                            </a>
+                            <a href="{% url 'workload_analysis_report' %}" class="btn btn-outline-warning">
+                                <i class="fas fa-balance-scale me-2"></i>Workload Distribution
+                                <small class="d-block text-muted">Check if work is evenly distributed</small>
+                            </a>
+                            <a href="{% url 'milestone_report' %}" class="btn btn-outline-warning">
+                                <i class="fas fa-flag-checkered me-2"></i>Milestone Progress
+                                <small class="d-block text-muted">Track daily progress updates</small>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Management Reports: For trend analysis and improvement -->
+            {% if user_role != 'DH' and user_role != 'AAO' %}
+            <div class="col-md-6">
+                <div class="card report-card h-100 border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Management Reports</h5>
+                        <small>Trends, patterns, and performance analysis</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'performance_trends_report' %}" class="btn btn-outline-info">
+                                <i class="fas fa-line-chart me-2"></i>Performance Trends
+                                <small class="d-block text-muted">See how performance changes over time</small>
+                            </a>
+                            <a href="{% url 'grievance_reports' %}" class="btn btn-outline-info">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Grievance Analytics
+                                <small class="d-block text-muted">Analyze complaint patterns and resolution</small>
+                            </a>
+                            <a href="{% url 'record_history_report' %}" class="btn btn-outline-info">
+                                <i class="fas fa-folder-open me-2"></i>Record Movement Analysis
+                                <small class="d-block text-muted">Track physical record movements</small>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Executive Reports: For strategic decision making -->
+            {% if can_view_executive_reports %}
+            <div class="col-md-6">
+                <div class="card report-card h-100 border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-crown me-2"></i>Executive Reports</h5>
+                        <small>Strategic insights and high-level summaries</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'executive_summary_report' %}" class="btn btn-outline-success">
+                                <i class="fas fa-chart-pie me-2"></i>Executive Summary
+                                <small class="d-block text-muted">Complete system overview for leadership</small>
+                            </a>
+                            <a href="#" class="btn btn-outline-success" onclick="alert('Advanced analytics coming soon!')">
+                                <i class="fas fa-brain me-2"></i>Predictive Analytics
+                                <small class="d-block text-muted">Forecast workload and identify patterns</small>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Export and Utilities -->
+            <div class="col-md-6">
+                <div class="card report-card h-100 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="fas fa-download me-2"></i>Export & Utilities</h5>
+                        <small>Download data for external analysis</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'export_cases_report' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-file-csv me-2"></i>Export Cases Data
+                                <small class="d-block text-muted">Download complete case information</small>
+                            </a>
+                            <a href="{% url 'export_grievances' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-file-excel me-2"></i>Export Grievances
+                                <small class="d-block text-muted">Download grievance data for analysis</small>
+                            </a>
+                            {% if user_role != 'DH' %}
+                            <a href="{% url 'export_workload_report' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-users me-2"></i>Export Team Data
+                                <small class="d-block text-muted">Download workload and performance data</small>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity: Gives context to the current state -->
+    <div class="report-section">
+        <h4 class="text-primary mb-3">Recent Activity Overview</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Cases</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if recent_cases %}
+                            <div class="list-group list-group-flush">
+                                {% for case in recent_cases %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ case.case_id }}</strong><br>
+                                        <small class="text-muted">{{ case.case_type.name }} - {{ case.registration_date|date:"d M" }}</small>
+                                    </div>
+                                    <span class="badge bg-{{ case.status_color|lower }} rounded-pill">{{ case.priority }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-muted">No recent cases found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Grievances</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if recent_grievances %}
+                            <div class="list-group list-group-flush">
+                                {% for grievance in recent_grievances %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ grievance.grievance_id }}</strong><br>
+                                        <small class="text-muted">{{ grievance.complainant_name }} - {{ grievance.date_received|date:"d M" }}</small>
+                                    </div>
+                                    <span class="badge bg-{% if grievance.status == 'NEW' %}danger{% elif grievance.status == 'ACTION_INITIATED' %}warning{% else %}success{% endif %} rounded-pill">
+                                        {{ grievance.get_status_display }}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-muted">No recent grievances found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Section: Explains how to use reports effectively -->
+    <div class="report-section">
+        <div class="card border-info">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-info"></i>How to Use These Reports Effectively</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6 class="text-primary">Daily Monitoring</h6>
+                        <p class="small text-muted">Check the Case Aging and Workload reports every morning to identify priority cases and balance team workload.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="text-primary">Weekly Reviews</h6>
+                        <p class="small text-muted">Use Performance Trends and Grievance Analytics to spot patterns and plan improvements for the following week.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="text-primary">Monthly Planning</h6>
+                        <p class="small text-muted">Executive Summary provides the big picture view needed for strategic planning and resource allocation decisions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add some interactivity to make the dashboard more engaging
+$(document).ready(function() {
+    // Animate metric cards on load
+    $('.metric-card').each(function(index) {
+        $(this).delay(index * 100).animate({opacity: 1}, 500);
+    });
+    
+    // Add tooltip for role badge
+    $('[data-bs-toggle="tooltip"]').tooltip();
+    
+    // Add click tracking for report usage analytics (optional)
+    $('.report-card a').on('click', function() {
+        var reportName = $(this).text().trim();
+        console.log('Report accessed: ' + reportName);
+        // You could send this to your analytics system
+    });
+});
+</script>
+{% endblock %}

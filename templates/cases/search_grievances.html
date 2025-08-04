@@ -1,0 +1,153 @@
+<!-- Create: templates/cases/search_grievances.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Search Grievances{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="fas fa-search me-2"></i>Advanced Grievance Search</h2>
+
+    <!-- Search Form -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Search Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="grievance_id" class="form-label">Grievance ID</label>
+                        <input type="text" class="form-control" id="grievance_id" name="grievance_id" 
+                               value="{{ search_form_data.grievance_id }}" placeholder="GR2024001">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ppo_number" class="form-label">PPO Number</label>
+                        <input type="text" class="form-control" id="ppo_number" name="ppo_number" 
+                               value="{{ search_form_data.ppo_number }}" placeholder="PPO123456">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="complainant_name" class="form-label">Complainant Name</label>
+                        <input type="text" class="form-control" id="complainant_name" name="complainant_name" 
+                               value="{{ search_form_data.complainant_name }}" placeholder="John Doe">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="pensioner_name" class="form-label">Pensioner Name</label>
+                        <input type="text" class="form-control" id="pensioner_name" name="pensioner_name" 
+                               value="{{ search_form_data.pensioner_name }}" placeholder="Jane Smith">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All Statuses</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if search_form_data.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="mode" class="form-label">Mode of Receipt</label>
+                        <select class="form-select" id="mode" name="mode">
+                            <option value="">All Modes</option>
+                            {% for mode in grievance_modes %}
+                                <option value="{{ mode.id }}" {% if search_form_data.mode == mode.id|stringformat:"s" %}selected{% endif %}>{{ mode.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="start_date" class="form-label">From Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" 
+                               value="{{ search_form_data.start_date }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="end_date" class="form-label">To Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" 
+                               value="{{ search_form_data.end_date }}">
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                        <a href="{% url 'search_grievances' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-eraser me-1"></i>Clear
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Search Results -->
+    {% if grievances is not None %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Search Results ({{ grievances.count }} found)</h5>
+                {% if grievances.count > 0 %}
+                    <a href="{% url 'export_grievances' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-success">
+                        <i class="fas fa-download me-1"></i>Export Results
+                    </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if grievances.count > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Grievance ID</th>
+                                    <th>PPO Number</th>
+                                    <th>Pensioner Name</th>
+                                    <th>Complainant</th>
+                                    <th>Date Received</th>
+                                    <th>Status</th>
+                                    <th>Mode</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for grievance in grievances %}
+                                <tr>
+                                    <td><strong>{{ grievance.grievance_id }}</strong></td>
+                                    <td>{{ grievance.pensioner.ppo_number|default:"N/A" }}</td>
+                                    <td>{{ grievance.pensioner.employee_name|default:"N/A" }}</td>
+                                    <td>{{ grievance.complainant_name }}</td>
+                                    <td>{{ grievance.date_received|date:"d M Y" }}</td>
+                                    <td>
+                                        {% if grievance.status == 'NEW' %}<span class="badge bg-danger">New</span>
+                                        {% elif grievance.status == 'ACTION_INITIATED' %}<span class="badge bg-warning text-dark">Action Initiated</span>
+                                        {% elif grievance.status == 'DISPOSED' %}<span class="badge bg-success">Disposed</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ grievance.mode_of_receipt.name }}</td>
+                                    <td>
+                                        {% if grievance.status == 'NEW' %}
+                                            <a href="{% url 'take_grievance_action' grievance.grievance_id %}" class="btn btn-sm btn-danger">Take Action</a>
+                                        {% elif grievance.generated_case %}
+                                            <a href="{% url 'case_detail' grievance.generated_case.case_id %}" class="btn btn-sm btn-outline-primary">View Case</a>
+                                        {% else %}
+                                            <span class="text-muted">No action available</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h4>No grievances found</h4>
+                        <p class="text-muted">Try adjusting your search criteria.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-info-circle fa-3x text-info mb-3"></i>
+            <h4>Enter search criteria above</h4>
+            <p class="text-muted">Use the filters above to search for specific grievances.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

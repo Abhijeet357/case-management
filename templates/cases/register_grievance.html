@@ -1,140 +1,219 @@
+<!-- Create: templates/cases/register_grievance.html -->
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
 
 {% block title %}Register New Grievance{% endblock %}
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-9">
-            <div class="card shadow-sm">
-                <div class="card-header bg-danger text-white">
-                    <h4 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>Register New Grievance</h4>
-                </div>
-                <div class="card-body">
-                    <form method="post" novalidate>
-                        {% csrf_token %}
-                        
-                <h5 class="mb-3">Step 1: Fetch Pensioner Details</h5>
-                <div class="mb-3">
-                    <label for="id_ppo_number" class="form-label">{{ form.ppo_number.label }}</label>
-                    <div class="input-group">
-                        <input type="text" name="ppo_number" class="form-control" placeholder="Enter PPO Number..." id="id_ppo_number" maxlength="20">
-                        <button type="button" class="btn btn-info btn-sm" id="fetch-ppo-details-btn"> <i class="fas fa-search me-1"></i>Fetch
-                        </button>
-                </div>
-                    <small class="form-text text-muted">{{ form.ppo_number.help_text }}</small>
-</div>
-                        </div>
-                        <div id="ppo-status-message" class="mb-3"></div>
+{% block extra_css %}
+<style>
+.form-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
 
-                        <div id="fetched-details-container" style="display: none;">
-                            <h5 class="mb-3">Step 2: Verify Fetched Information</h5>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">{{ form.pensioner_type|as_crispy_field }}</div>
-                                <div class="col-md-6 mb-3">{{ form.date_of_retirement|as_crispy_field }}</div>
-                                <div class="col-md-6 mb-3">{{ form.pension_type|as_crispy_field }}</div>
-                                <div class="col-md-6 mb-3">{{ form.date_of_death|as_crispy_field }}</div>
-                            </div>
-                        </div>
+.card-form {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 30px;
+}
 
-                        <h5 class="mb-3">Step 3: Enter Grievance Details</h5>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">{{ form.complainant_name|as_crispy_field }}</div>
-                            <div class="col-md-6 mb-3">{{ form.registered_contact|as_crispy_field }}</div>
-                        </div>
-                        <div class="mb-3">{{ form.complainant_contact|as_crispy_field }}</div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">{{ form.mode_of_receipt|as_crispy_field }}</div>
-                            <div class="col-md-6 mb-3">{{ form.date_received|as_crispy_field }}</div>
-                        </div>
-                        <div class="mb-3">{{ form.assigned_to|as_crispy_field }}</div>
-                        <div class="mb-4">{{ form.grievance_text|as_crispy_field }}</div>
+.required::after {
+    content: " *";
+    color: red;
+}
 
-                        <div class="d-flex justify-content-between align-items-center mt-4">
-                            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Register Grievance</button>
-                            <a href="{% url 'dashboard' %}" class="btn btn-secondary"><i class="fas fa-times me-1"></i>Cancel</a>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+.alert {
+    border-radius: 8px;
+}
+</style>
 {% endblock %}
 
-{% block scripts %}
+{% block content %}
+<div class="form-container">
+    <div class="card-form">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="text-danger mb-1">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Register New Grievance
+                </h2>
+                <p class="text-muted mb-0">Register a complaint or grievance from a pensioner</p>
+            </div>
+            <a href="{% url 'grievance_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to List
+            </a>
+        </div>
+
+        {% if form.errors %}
+            <div class="alert alert-danger">
+                <strong>Please correct the following errors:</strong>
+                <ul class="mb-0 mt-2">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form method="post" id="grievanceForm">
+            {% csrf_token %}
+            
+            <div class="row">
+                <!-- PPO Information Section -->
+                <div class="col-md-6">
+                    <div class="card border-primary mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-user me-2"></i>Pensioner Information</h5>
+                        </div>
+                        <div class="card-body">
+                            {{ form.ppo_number|as_crispy_field }}
+                            <button type="button" id="fetch-ppo-btn" class="btn btn-info btn-sm mb-3">
+                                <i class="fas fa-search me-1"></i>Fetch Pensioner Data
+                            </button>
+                            <div id="ppo-status"></div>
+                            
+                            <!-- Display fetched pensioner data -->
+                            <div id="pensioner-info" style="display: none;" class="border rounded p-3 bg-light">
+                                <h6 class="text-primary">Pensioner Details:</h6>
+                                <p class="mb-1"><strong>Name:</strong> <span id="pensioner-name"></span></p>
+                                <p class="mb-1"><strong>PPO Number:</strong> <span id="pensioner-ppo"></span></p>
+                                <p class="mb-0"><strong>Mobile:</strong> <span id="pensioner-mobile"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Complainant Information Section -->
+                <div class="col-md-6">
+                    <div class="card border-warning mb-4">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0"><i class="fas fa-user-edit me-2"></i>Complainant Information</h5>
+                        </div>
+                        <div class="card-body">
+                            {{ form.complainant_name|as_crispy_field }}
+                            {{ form.complainant_contact|as_crispy_field }}
+                            {{ form.mode_of_receipt|as_crispy_field }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grievance Details Section -->
+            <div class="card border-danger mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Grievance Details</h5>
+                </div>
+                <div class="card-body">
+                    {{ form.grievance_text|as_crispy_field }}
+                    <small class="form-text text-muted">
+                        Please provide detailed information about the grievance. Include relevant dates, amounts, and any previous correspondence.
+                    </small>
+                </div>
+            </div>
+
+            <!-- Submit Section -->
+            <div class="text-center">
+                <button type="submit" class="btn btn-danger btn-lg me-2">
+                    <i class="fas fa-save me-1"></i>Register Grievance
+                </button>
+                <a href="{% url 'grievance_dashboard' %}" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
 $(document).ready(function() {
-    $('#fetch-ppo-details-btn').on('click', function(e) {
-        e.preventDefault();
-        
-        // --- 1. Get references to all our form fields ---
+    // PPO Data Fetcher
+    $('#fetch-ppo-btn').click(function() {
         var ppoNumber = $('#id_ppo_number').val().trim();
-        var statusDiv = $('#ppo-status-message');
-        var detailsContainer = $('#fetched-details-container');
+        var $button = $(this);
+        var $status = $('#ppo-status');
         
-        // Editable fields
-        var nameField = $('#id_complainant_name');
-        var contactField = $('#id_complainant_contact');
-
-        // Read-only display fields
-        var registeredContactField = $('#id_registered_contact');
-        var pensionerTypeField = $('#id_pensioner_type');
-        var retirementDateField = $('#id_date_of_retirement');
-        var pensionTypeField = $('#id_pension_type');
-        var deathDateField = $('#id_date_of_death');
-
         if (!ppoNumber) {
-            statusDiv.html('<div class="alert alert-warning">Please enter a PPO number.</div>');
+            $status.html('<div class="alert alert-warning">Please enter a PPO number</div>');
             return;
         }
-
-        // --- 2. Show loading state ---
-        statusDiv.html('<div class="alert alert-info">Fetching details...</div>');
-        detailsContainer.hide(); // Hide the details section while loading
-        var $fetchBtn = $(this);
-        $fetchBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Fetching...');
-
-        // --- 3. Make the AJAX call ---
+        
+        $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Fetching...');
+        $status.html('<div class="alert alert-info">Fetching pensioner data...</div>');
+        
         $.ajax({
-            url: "{% url 'get_ppo_data' %}",
-            method: 'GET',
-            data: { 'ppo_number': ppoNumber },
+            url: '{% url "get_ppo_data" %}',
+            type: 'GET',
+            data: { ppo_number: ppoNumber },
             success: function(response) {
                 if (response.success && response.data) {
                     var data = response.data;
                     
-                    // --- 4. Populate ALL the fields with the fetched data ---
-                    nameField.val(data.employee_name || '').prop('readonly', false);
-                    registeredContactField.val(data.mobile_number || 'Not available');
+                    // Display pensioner information
+                    $('#pensioner-name').text(data.employee_name || 'N/A');
+                    $('#pensioner-ppo').text(ppoNumber);
+                    $('#pensioner-mobile').text(data.mobile_number || 'N/A');
                     
-                    // Populate the new read-only fields
-                    pensionerTypeField.val(data.pensioner_type || 'N/A');
-                    retirementDateField.val(data.date_of_retirement || 'N/A');
-                    pensionTypeField.val(data.pension_type || 'N/A');
-                    deathDateField.val(data.date_of_death || 'N/A');
+                    $('#pensioner-info').show();
+                    $status.html('<div class="alert alert-success">Pensioner data fetched successfully!</div>');
                     
-                    // Show the container with the fetched details
-                    detailsContainer.slideDown(); 
-                    statusDiv.html('<div class="alert alert-success">Pensioner details loaded for <strong>' + data.employee_name + '</strong>.</div>');
+                    // Auto-hide success message
+                    setTimeout(function() {
+                        $status.fadeOut();
+                    }, 5000);
                 } else {
-                    // Handle case where PPO is not found
-                    statusDiv.html('<div class="alert alert-warning">' + (response.error || 'PPO not found.') + '</div>');
-                    detailsContainer.slideUp();
+                    $status.html('<div class="alert alert-danger">' + (response.error || 'PPO number not found') + '</div>');
+                    $('#pensioner-info').hide();
                 }
             },
             error: function() {
-                // Handle server or network errors
-                statusDiv.html('<div class="alert alert-danger">An error occurred while fetching data.</div>');
-                detailsContainer.slideUp();
+                $status.html('<div class="alert alert-danger">Error fetching PPO data. Please try again.</div>');
+                $('#pensioner-info').hide();
             },
             complete: function() {
-                // Reset the button state
-                $fetchBtn.prop('disabled', false).html('<i class="fas fa-search me-1"></i>Fetch Details');
+                $button.prop('disabled', false).html('<i class="fas fa-search me-1"></i>Fetch Pensioner Data');
             }
         });
+    });
+    
+    // Form validation
+    $('#grievanceForm').submit(function(e) {
+        var isValid = true;
+        var errors = [];
+        
+        // Check required fields
+        if (!$('#id_ppo_number').val().trim()) {
+            errors.push('PPO Number is required');
+            isValid = false;
+        }
+        
+        if (!$('#id_complainant_name').val().trim()) {
+            errors.push('Complainant Name is required');
+            isValid = false;
+        }
+        
+        if (!$('#id_grievance_text').val().trim()) {
+            errors.push('Grievance Details are required');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            alert('Please fill in all required fields:\n' + errors.join('\n'));
+            return false;
+        }
+        
+        // Show loading state
+        $('button[type="submit"]').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Registering...');
+    });
+    
+    // Auto-resize textarea
+    $('#id_grievance_text').on('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
     });
 });
 </script>

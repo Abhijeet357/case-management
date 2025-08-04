@@ -1,0 +1,290 @@
+<!-- Create: templates/cases/case_aging_report.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Case Aging Report{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Visual indicators help users quickly understand priority levels */
+.age-indicator {
+    width: 8px;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.priority-success { background-color: #28a745; }
+.priority-warning { background-color: #ffc107; }
+.priority-danger { background-color: #dc3545; }
+.priority-critical { background-color: #6f42c1; }
+
+.case-row {
+    position: relative;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.case-row:hover {
+    transform: translateX(5px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.summary-card {
+    text-align: center;
+    padding: 1.5rem;
+    border-radius: 10px;
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header with explanation of what this report does -->
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h2><i class="fas fa-hourglass-half me-2 text-warning"></i>Case Aging Report</h2>
+            <p class="text-muted mb-0">
+                This report identifies cases that have been pending for extended periods, helping you prioritize work and identify potential bottlenecks in your workflow.
+            </p>
+        </div>
+        <div class="text-end">
+            <a href="{% url 'reports_dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Reports
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters: Allow users to focus on specific subsets of data -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h5>
+            <small class="text-muted">Use these filters to analyze specific types of cases</small>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label for="case_type" class="form-label">Case Type</label>
+                    <select class="form-select" id="case_type" name="case_type">
+                        <option value="">All Case Types</option>
+                        {% for case_type in case_types %}
+                            <option value="{{ case_type.id }}" {% if filters.case_type == case_type.id|stringformat:"s" %}selected{% endif %}>
+                                {{ case_type.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="priority" class="form-label">Priority</label>
+                    <select class="form-select" id="priority" name="priority">
+                        <option value="">All Priorities</option>
+                        <option value="High" {% if filters.priority == 'High' %}selected{% endif %}>High</option>
+                        <option value="Medium" {% if filters.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                        <option value="Low" {% if filters.priority == 'Low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="start_date" class="form-label">From Date</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ filters.start_date }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="end_date" class="form-label">To Date</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ filters.end_date }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary: High-level overview helps users understand the overall situation -->
+    <div class="summary-grid mb-4">
+        <div class="summary-card priority-success">
+            <h3>{{ age_summary.0-7 days }}</h3>
+            <p class="mb-0">0-7 Days</p>
+            <small>On Track</small>
+        </div>
+        <div class="summary-card priority-warning">
+            <h3>{{ age_summary.8-15 days }}</h3>
+            <p class="mb-0">8-15 Days</p>
+            <small>Watch Closely</small>
+        </div>
+        <div class="summary-card priority-danger">
+            <h3>{{ age_summary.16-30 days }}</h3>
+            <p class="mb-0">16-30 Days</p>
+            <small>Need Attention</small>
+        </div>
+        <div class="summary-card priority-critical">
+            <h3>{{ age_summary.30+ days }}</h3>
+            <p class="mb-0">30+ Days</p>
+            <small>Critical</small>
+        </div>
+    </div>
+
+    <!-- Explanation: Help users understand how to interpret the data -->
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>How to Read This Report</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Color Coding System:</strong></p>
+                <ul class="mb-0">
+                    <li><span class="badge bg-success me-1">Green</span> 0-7 days: Normal processing time</li>
+                    <li><span class="badge bg-warning me-1">Yellow</span> 8-15 days: Monitor for potential issues</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <ul class="mb-0" style="list-style: none; padding-left: 0;">
+                    <li><span class="badge bg-danger me-1">Red</span> 16-30 days: Requires immediate attention</li>
+                    <li><span class="badge bg-dark me-1">Purple</span> 30+ days: Critical delay - investigate causes</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Case List: The main data presentation -->
+    {% if aging_data %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Case Details ({{ aging_data|length }} cases)</h5>
+                <small class="text-muted">Sorted by days pending (most urgent first)</small>
+            </div>
+            <div class="card-body p-0">
+                {% for item in aging_data %}
+                    <div class="case-row p-3 border-bottom {{ item.priority_level }}">
+                        <div class="age-indicator priority-{{ item.priority_level }}"></div>
+                        <div class="row align-items-center">
+                            <div class="col-md-2">
+                                <strong class="text-primary">{{ item.case.case_id }}</strong><br>
+                                <small class="text-muted">{{ item.case.case_type.name }}</small>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>{{ item.case.applicant_name|default:"No applicant name" }}</strong><br>
+                                <small class="text-muted">
+                                    {% if item.case.ppo_master %}PPO: {{ item.case.ppo_master.ppo_number }}{% endif %}
+                                </small>
+                            </div>
+                            <div class="col-md-2">
+                                <span class="badge bg-{{ item.case.priority|lower }} me-1">{{ item.case.priority }}</span><br>
+                                <small class="text-muted">Priority</small>
+                            </div>
+                            <div class="col-md-2 text-center">
+                                <h5 class="mb-0 
+                                    {% if item.priority_level == 'success' %}text-success
+                                    {% elif item.priority_level == 'warning' %}text-warning
+                                    {% elif item.priority_level == 'danger' %}text-danger
+                                    {% else %}text-dark{% endif %}">
+                                    {{ item.days_pending }}
+                                </h5>
+                                <small class="text-muted">days pending</small>
+                            </div>
+                            <div class="col-md-2">
+                                <strong>{{ item.case.current_holder.user.get_full_name|default:item.case.current_holder.user.username }}</strong><br>
+                                <small class="text-muted">{{ item.case.current_holder.get_role_display }}</small>
+                            </div>
+                            <div class="col-md-1 text-end">
+                                <a href="{% url 'case_detail' item.case.case_id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <!-- Additional context in collapsible section -->
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-link p-0 text-muted" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#details-{{ forloop.counter }}"
+                                    aria-expanded="false">
+                                <i class="fas fa-chevron-down me-1"></i>Show details
+                            </button>
+                        </div>
+                        <div class="collapse mt-2" id="details-{{ forloop.counter }}">
+                            <div class="card card-body bg-light">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <small><strong>Registered:</strong> {{ item.case.registration_date|date:"d M Y" }}</small><br>
+                                        <small><strong>Expected Completion:</strong> {{ item.case.expected_completion|date:"d M Y" }}</small><br>
+                                        <small><strong>Current Status:</strong> {{ item.case.current_status }}</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small><strong>Description:</strong></small><br>
+                                        <small class="text-muted">{{ item.case.case_description|truncatewords:20 }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <!-- Empty state: What to show when there's no data -->
+        <div class="text-center py-5">
+            <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+            <h3 class="text-success">Excellent Work!</h3>
+            <p class="lead">No cases match your current filter criteria.</p>
+            <p class="text-muted">This could mean all cases are being processed efficiently, or your filters are too restrictive.</p>
+            <a href="{% url 'case_aging_report' %}" class="btn btn-primary">Clear All Filters</a>
+        </div>
+    {% endif %}
+
+    <!-- Action Items: What the user should do with this information -->
+    {% if aging_data %}
+    <div class="card mt-4 border-warning">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recommended Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h6 class="text-danger">Immediate Priority ({{ age_summary.30+ days }} cases)</h6>
+                    <p class="small">Cases over 30 days need immediate investigation. Check for missing documents, reassign if needed, or escalate to supervisors.</p>
+                </div>
+                <div class="col-md-4">
+                    <h6 class="text-warning">Monitor Closely ({{ age_summary.16-30 days }} cases)</h6>
+                    <p class="small">These cases are approaching critical aging. Review progress, provide additional support, or remove blockers.</p>
+                </div>
+                <div class="col-md-4">
+                    <h6 class="text-info">Keep Track ({{ age_summary.8-15 days }} cases)</h6>
+                    <p class="small">Watch these cases to ensure they don't slip into the critical category. Regular check-ins may help.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Add some interactive features to enhance usability
+$(document).ready(function() {
+    // Auto-submit filters when changed (optional - makes it more responsive)
+    $('.form-select, .form-control').on('change', function() {
+        // You could uncomment this to auto-submit filters
+        // $(this).closest('form').submit();
+    });
+    
+    // Track which details are most viewed (analytics)
+    $('.collapse').on('show.bs.collapse', function() {
+        console.log('Case details viewed for: ' + $(this).prev().find('.text-primary').text());
+    });
+    
+    // Add keyboard navigation for accessibility
+    $('.case-row').attr('tabindex', '0').on('keypress', function(e) {
+        if (e.which === 13) { // Enter key
+            $(this).find('.btn-outline-primary').click();
+        }
+    });
+});
+</script>
+{% endblock %}

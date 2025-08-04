@@ -1,0 +1,173 @@
+<!-- Create: templates/cases/grievance_dashboard.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Grievance Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="fas fa-chart-pie me-2"></i>Grievance Dashboard</h2>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ stats.total_grievances }}</h4>
+                            <p class="mb-0">Total Grievances</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-list fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ stats.new_grievances }}</h4>
+                            <p class="mb-0">New Grievances</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ stats.action_initiated }}</h4>
+                            <p class="mb-0">Action Initiated</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-play-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ stats.disposed_grievances }}</h4>
+                            <p class="mb-0">Disposed</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recent Grievances -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Grievances</h5>
+                    <a href="{% url 'grievance_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_grievances %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Grievance ID</th>
+                                        <th>Pensioner</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for grievance in recent_grievances %}
+                                    <tr>
+                                        <td>{{ grievance.grievance_id }}</td>
+                                        <td>{{ grievance.pensioner.employee_name|default:"N/A" }}</td>
+                                        <td>{{ grievance.date_received|date:"d M Y" }}</td>
+                                        <td>
+                                            {% if grievance.status == 'NEW' %}<span class="badge bg-danger">New</span>
+                                            {% elif grievance.status == 'ACTION_INITIATED' %}<span class="badge bg-warning text-dark">Action Initiated</span>
+                                            {% elif grievance.status == 'DISPOSED' %}<span class="badge bg-success">Disposed</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if grievance.status == 'NEW' %}
+                                                <a href="{% url 'take_grievance_action' grievance.grievance_id %}" class="btn btn-sm btn-danger">Take Action</a>
+                                            {% elif grievance.generated_case %}
+                                                <a href="{% url 'case_detail' grievance.generated_case.case_id %}" class="btn btn-sm btn-outline-primary">View Case</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No recent grievances.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions & Overdue -->
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'register_grievance' %}" class="btn btn-danger">
+                            <i class="fas fa-plus-circle me-1"></i> Register New Grievance
+                        </a>
+                        <a href="{% url 'pending_grievance_actions' %}" class="btn btn-warning">
+                            <i class="fas fa-clock me-1"></i> Pending Actions
+                        </a>
+                        <a href="{% url 'my_grievances' %}" class="btn btn-info">
+                            <i class="fas fa-user-tag me-1"></i> My Grievances ({{ stats.my_grievances }})
+                        </a>
+                        <a href="{% url 'grievance_reports' %}" class="btn btn-secondary">
+                            <i class="fas fa-chart-bar me-1"></i> Reports
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {% if overdue_grievances %}
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">⚠️ Overdue Grievances</h5>
+                </div>
+                <div class="card-body">
+                    {% for grievance in overdue_grievances %}
+                    <div class="border-bottom py-2">
+                        <strong>{{ grievance.grievance_id }}</strong><br>
+                        <small class="text-muted">{{ grievance.date_received|date:"d M Y" }} - {{ grievance.complainant_name }}</small><br>
+                        <a href="{% url 'take_grievance_action' grievance.grievance_id %}" class="btn btn-sm btn-outline-danger">Take Action</a>
+                    </div>
+                    {% endfor %}
+                    <div class="text-center mt-2">
+                        <a href="{% url 'escalated_grievances' %}" class="btn btn-sm btn-danger">View All Overdue</a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

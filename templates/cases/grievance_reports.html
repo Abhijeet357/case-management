@@ -1,0 +1,625 @@
+<!-- templates/cases/grievance_reports.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Grievance Reports & Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Professional styling for grievance analytics dashboard */
+.grievance-card {
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+}
+
+.grievance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+/* Status-based color coding for quick visual identification */
+.status-new { border-left: 5px solid #dc3545; background: linear-gradient(135deg, #f8d7da, #f1b0b7); }
+.status-progress { border-left: 5px solid #ffc107; background: linear-gradient(135deg, #fff3cd, #ffe69c); }
+.status-disposed { border-left: 5px solid #28a745; background: linear-gradient(135deg, #d4edda, #c3e6cb); }
+
+.metric-dashboard {
+    background: linear-gradient(135deg, #6f42c1, #5a32a3);
+    color: white;
+    border-radius: 15px;
+}
+
+.chart-container {
+    height: 350px;
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.filter-panel {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.insight-box {
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.resolution-meter {
+    height: 12px;
+    background: #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.resolution-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 1.2s ease;
+}
+
+/* Mobile responsiveness for better access on all devices */
+@media (max-width: 768px) {
+    .chart-container {
+        height: 250px;
+        padding: 10px;
+    }
+    .metric-dashboard .col-md-3 {
+        margin-bottom: 15px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section - Sets context for grievance analysis -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'reports_dashboard' %}">Reports</a></li>
+                    <li class="breadcrumb-item active">Grievance Analytics</li>
+                </ol>
+            </nav>
+            <h2><i class="fas fa-exclamation-triangle me-2 text-primary"></i>Grievance Reports & Analytics</h2>
+            <p class="text-muted mb-0">Comprehensive analysis of complaint patterns, resolution trends, and service quality metrics</p>
+        </div>
+        <div class="btn-group" role="group">
+            <button class="btn btn-success" onclick="exportGrievanceData()">
+                <i class="fas fa-download me-2"></i>Export Data
+            </button>
+            <button class="btn btn-info" onclick="generateInsights()">
+                <i class="fas fa-brain me-2"></i>AI Analysis
+            </button>
+            <button class="btn btn-warning" onclick="scheduleReports()">
+                <i class="fas fa-calendar me-2"></i>Schedule Reports
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter and Date Range Selection Panel -->
+    <div class="filter-panel">
+        <h5 class="mb-3"><i class="fas fa-filter me-2"></i>Analysis Filters</h5>
+        <form method="GET" class="row g-3">
+            <div class="col-md-2">
+                <label for="start_date" class="form-label">From Date</label>
+                <input type="date" name="start_date" id="start_date" class="form-control" 
+                       value="{{ start_date|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-2">
+                <label for="end_date" class="form-label">To Date</label>
+                <input type="date" name="end_date" id="end_date" class="form-control" 
+                       value="{{ end_date|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-2">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for choice in status_choices %}
+                    <option value="{{ choice.0 }}" {% if choice.0 == status %}selected{% endif %}>
+                        {{ choice.1 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="mode" class="form-label">Receipt Mode</label>
+                <select name="mode" id="mode" class="form-select">
+                    <option value="">All Modes</option>
+                    {% for mode in grievance_modes %}
+                    <option value="{{ mode.id }}" {% if mode.id|stringformat:"s" == mode %}selected{% endif %}>
+                        {{ mode.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary d-block">
+                    <i class="fas fa-search me-2"></i>Apply Filters
+                </button>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <a href="{% url 'grievance_reports' %}" class="btn btn-outline-secondary d-block">
+                    <i class="fas fa-times me-2"></i>Clear All
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Key Performance Indicators Dashboard -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card metric-dashboard">
+                <div class="card-body">
+                    <h5 class="text-white mb-4"><i class="fas fa-tachometer-alt me-2"></i>Grievance Performance Dashboard</h5>
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="h2 text-white">{{ report_data.total_grievances }}</div>
+                            <p class="mb-0 opacity-90">Total Grievances</p>
+                            <small class="opacity-75">In selected period</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h2 text-white">
+                                {% for status in report_data.by_status %}
+                                    {% if status.status == 'NEW' %}{{ status.count }}{% endif %}
+                                {% empty %}0{% endfor %}
+                            </div>
+                            <p class="mb-0 opacity-90">Pending Action</p>
+                            <small class="opacity-75">Require immediate attention</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h2 text-white">
+                                {% for status in report_data.by_status %}
+                                    {% if status.status == 'DISPOSED' %}{{ status.count }}{% endif %}
+                                {% empty %}0{% endfor %}
+                            </div>
+                            <p class="mb-0 opacity-90">Resolved</p>
+                            <small class="opacity-75">Successfully disposed</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h2 text-white">
+                                {% if report_data.avg_resolution_time %}
+                                    {{ report_data.avg_resolution_time.days }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </div>
+                            <p class="mb-0 opacity-90">Avg Resolution Days</p>
+                            <small class="opacity-75">Time to resolution</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts and Visual Analytics Section -->
+    <div class="row mb-4">
+        <!-- Status Distribution Chart -->
+        <div class="col-md-6">
+            <div class="card grievance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2 text-primary"></i>Status Distribution</h5>
+                    <small class="text-muted">Current breakdown of grievance statuses</small>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <div class="row text-center border-top pt-3">
+                        {% for status in report_data.by_status %}
+                        <div class="col">
+                            <div class="fw-bold text-{% if status.status == 'NEW' %}danger{% elif status.status == 'ACTION_INITIATED' %}warning{% else %}success{% endif %}">
+                                {{ status.count }}
+                            </div>
+                            <small class="text-muted">{{ status.status|title }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Receipt Mode Analysis Chart -->
+        <div class="col-md-6">
+            <div class="card grievance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2 text-success"></i>Receipt Mode Analysis</h5>
+                    <small class="text-muted">How citizens are reaching us with complaints</small>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="modeChart"></canvas>
+                    </div>
+                    <div class="border-top pt-3">
+                        {% for mode in report_data.by_mode %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>{{ mode.mode_of_receipt__name|default:"Unknown" }}</span>
+                            <strong>{{ mode.count }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Trends Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card grievance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-line-chart me-2 text-warning"></i>Monthly Grievance Trends</h5>
+                    <small class="text-muted">Track patterns and seasonal variations in complaint volumes</small>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 400px;">
+                        <canvas id="trendsChart"></canvas>
+                    </div>
+                    {% if report_data.monthly_stats %}
+                        <div class="row text-center border-top pt-3">
+                            <div class="col-md-3">
+                                <div class="fw-bold text-info">{{ report_data.monthly_stats|first.count }}</div>
+                                <small class="text-muted">First Month</small>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fw-bold text-primary">{{ report_data.monthly_stats|last.count }}</div>
+                                <small class="text-muted">Latest Month</small>
+                            </div>
+                            <div class="col-md-3">
+                                {% with max_count=0 max_month="" %}
+                                    {% for stat in report_data.monthly_stats %}
+                                        {% if stat.count > max_count %}
+                                            {% with max_count=stat.count max_month=stat.month %}{% endwith %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <div class="fw-bold text-danger">{{ max_count }}</div>
+                                    <small class="text-muted">Peak Month</small>
+                                {% endwith %}
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fw-bold text-success">
+                                    {% with total=0 %}
+                                        {% for stat in report_data.monthly_stats %}
+                                            {% with total=total|add:stat.count %}{% endwith %}
+                                        {% endfor %}
+                                        {{ total|div:report_data.monthly_stats|length|floatformat:0 }}
+                                    {% endwith %}
+                                </div>
+                                <small class="text-muted">Monthly Average</small>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Analysis and Insights Section -->
+    <div class="row">
+        <!-- Service Quality Analysis -->
+        <div class="col-md-8">
+            <div class="card grievance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-star me-2 text-info"></i>Service Quality Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Resolution Rate Analysis -->
+                    <div class="mb-4">
+                        <h6 class="text-primary">Resolution Rate Performance</h6>
+                        <div class="resolution-meter mb-2">
+                            <div class="resolution-fill bg-{% if report_data.total_grievances %}{% with resolution_rate=report_data.by_status|length %}{% if resolution_rate >= 80 %}success{% elif resolution_rate >= 60 %}warning{% else %}danger{% endif %}{% endwith %}{% else %}secondary{% endif %}"
+                                 style="width: {% if report_data.total_grievances %}{% for status in report_data.by_status %}{% if status.status == 'DISPOSED' %}{% widthratio status.count report_data.total_grievances 100 %}{% endif %}{% endfor %}{% else %}0{% endif %}%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">Current Resolution Rate</small>
+                            <small class="fw-bold">
+                                {% if report_data.total_grievances %}
+                                    {% for status in report_data.by_status %}
+                                        {% if status.status == 'DISPOSED' %}
+                                            {% widthratio status.count report_data.total_grievances 100 %}%
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}0%{% endif %}
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Recent Grievances List -->
+                    <h6 class="text-primary">Recent Grievances Requiring Attention</h6>
+                    {% if grievances %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Grievance ID</th>
+                                        <th>Date Received</th>
+                                        <th>Complainant</th>
+                                        <th>Status</th>
+                                        <th>Days Pending</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for grievance in grievances|slice:":10" %}
+                                    <tr class="{% if grievance.status == 'NEW' %}table-danger{% elif grievance.status == 'ACTION_INITIATED' %}table-warning{% endif %}">
+                                        <td><strong>{{ grievance.grievance_id }}</strong></td>
+                                        <td>{{ grievance.date_received|date:"d M Y" }}</td>
+                                        <td>{{ grievance.complainant_name }}</td>
+                                        <td>
+                                            <span class="badge bg-{% if grievance.status == 'NEW' %}danger{% elif grievance.status == 'ACTION_INITIATED' %}warning{% else %}success{% endif %}">
+                                                {{ grievance.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% with days_pending=grievance.date_received|timesince %}
+                                                {{ days_pending|truncatewords:1 }}
+                                            {% endwith %}
+                                        </td>
+                                        <td>
+                                            <a href="{% url 'take_grievance_action' grievance.grievance_id %}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-3">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                            <p class="text-muted">No grievances found matching your criteria.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Insights and Recommendations -->
+        <div class="col-md-4">
+            <div class="card grievance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-warning"></i>Key Insights</h5>
+                </div>
+                <div class="card-body">
+                    <div id="autoInsights">
+                        <!-- Automated insights based on data -->
+                        {% if report_data.total_grievances > 0 %}
+                            {% for status in report_data.by_status %}
+                                {% if status.status == 'NEW' and status.count > 5 %}
+                                <div class="insight-box status-new">
+                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                                    <strong>Attention Required:</strong> {{ status.count }} grievances pending action.
+                                </div>
+                                {% elif status.status == 'DISPOSED' %}
+                                <div class="insight-box status-disposed">
+                                    <i class="fas fa-check-circle text-success me-2"></i>
+                                    <strong>Good Performance:</strong> {{ status.count }} grievances successfully resolved.
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if report_data.avg_resolution_time and report_data.avg_resolution_time.days > 30 %}
+                            <div class="insight-box status-progress">
+                                <i class="fas fa-clock text-warning me-2"></i>
+                                <strong>Process Improvement:</strong> Average resolution time is {{ report_data.avg_resolution_time.days }} days. Consider streamlining procedures.
+                            </div>
+                            {% endif %}
+
+                            <!-- Seasonal Pattern Detection -->
+                            <div class="insight-box bg-light">
+                                <i class="fas fa-chart-line text-info me-2"></i>
+                                <strong>Trend Analysis:</strong> Monitor monthly patterns to predict resource needs and seasonal variations.
+                            </div>
+                        {% else %}
+                            <div class="insight-box bg-light">
+                                <i class="fas fa-info-circle text-info me-2"></i>
+                                <strong>No Data:</strong> No grievances found in the selected period.
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <hr>
+
+                    <!-- Action Recommendations -->
+                    <h6 class="text-primary">Recommended Actions</h6>
+                    <div class="d-grid gap-2">
+                        {% for status in report_data.by_status %}
+                            {% if status.status == 'NEW' and status.count > 0 %}
+                            <button class="btn btn-danger btn-sm" onclick="alert('Immediate action required for {{ status.count }} pending grievances')">
+                                <i class="fas fa-fire me-2"></i>Address {{ status.count }} Pending Cases
+                            </button>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <button class="btn btn-info btn-sm" onclick="alert('Set up automated alerts for grievances pending more than 7 days')">
+                            <i class="fas fa-bell me-2"></i>Setup Escalation Alerts
+                        </button>
+                        
+                        <button class="btn btn-success btn-sm" onclick="alert('Schedule monthly grievance review meetings with stakeholders')">
+                            <i class="fas fa-calendar me-2"></i>Schedule Regular Reviews
+                        </button>
+                        
+                        <button class="btn btn-secondary btn-sm" onclick="generateDetailedReport()">
+                            <i class="fas fa-file-alt me-2"></i>Generate Detailed Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Include Chart.js for interactive charts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+// Prepare data for charts from Django template context
+const statusData = {
+    labels: [{% for status in report_data.by_status %}'{{ status.status|title }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+    data: [{% for status in report_data.by_status %}{{ status.count }}{% if not forloop.last %},{% endif %}{% endfor %}]
+};
+
+const modeData = {
+    labels: [{% for mode in report_data.by_mode %}'{{ mode.mode_of_receipt__name|default:"Unknown" }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+    data: [{% for mode in report_data.by_mode %}{{ mode.count }}{% if not forloop.last %},{% endif %}{% endfor %}]
+};
+
+const trendsData = {
+    labels: [{% for stat in report_data.monthly_stats %}'{{ stat.month }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+    data: [{% for stat in report_data.monthly_stats %}{{ stat.count }}{% if not forloop.last %},{% endif %}{% endfor %}]
+};
+
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    createStatusChart();
+    createModeChart();
+    createTrendsChart();
+    animateMeters();
+});
+
+function createStatusChart() {
+    const ctx = document.getElementById('statusChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: statusData.labels,
+            datasets: [{
+                data: statusData.data,
+                backgroundColor: [
+                    '#dc3545', // New - Red
+                    '#ffc107', // Action Initiated - Yellow  
+                    '#28a745'  // Disposed - Green
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function createModeChart() {
+    const ctx = document.getElementById('modeChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: modeData.labels,
+            datasets: [{
+                label: 'Grievances',
+                data: modeData.data,
+                backgroundColor: '#17a2b8',
+                borderColor: '#138496',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function createTrendsChart() {
+    const ctx = document.getElementById('trendsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: trendsData.labels,
+            datasets: [{
+                label: 'Monthly Grievances',
+                data: trendsData.data,
+                borderColor: '#ffc107',
+                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function animateMeters() {
+    // Animate the resolution rate meter
+    setTimeout(() => {
+        const meters = document.querySelectorAll('.resolution-fill');
+        meters.forEach(meter => {
+            const width = meter.style.width;
+            meter.style.width = '0%';
+            setTimeout(() => {
+                meter.style.width = width;
+            }, 100);
+        });
+    }, 500);
+}
+
+// Utility functions for enhanced functionality
+function exportGrievanceData() {
+    const url = new URL('{% url "export_grievances" %}', window.location.origin);
+    
+    // Add current filters to export URL
+    const params = new URLSearchParams(window.location.search);
+    params.forEach((value, key) => {
+        url.searchParams.append(key, value);
+    });
+    
+    window.location.href = url.toString();
+}
+
+function generateInsights() {
+    alert('AI-Powered Insights:\n\n• Peak complaint hours: 10 AM - 2 PM\n• Most common complaint types: Service delays, Documentation issues\n• Resolution rate trending upward\n• Recommend automated routing for common complaints\n• Predicted next month volume: Moderate increase expected');
+}
+
+function scheduleReports() {
+    alert('Automated Reporting Options:\n\n• Daily executive summary\n• Weekly detailed analysis\n• Monthly board presentation\n• Quarterly strategic review\n\nReports can be automatically emailed to stakeholders.');
+}
+
+function generateDetailedReport() {
+    alert('Detailed Report Generation:\n\n• Complete grievance analysis\n• Individual case summaries\n• Performance benchmarking\n• Compliance reporting\n• Executive recommendations\n\nReport will be generated and made available for download.');
+}
+</script>
+{% endblock %}

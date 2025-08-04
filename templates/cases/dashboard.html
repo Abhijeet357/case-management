@@ -5,164 +5,489 @@
 
 {% block extra_css %}
 <style>
-    .task-card { transition: all 0.2s ease-in-out; border-left-width: 4px; }
-    .task-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .priority-High { border-left-color: #dc3545; }
-    .priority-Medium { border-left-color: #ffc107; }
-    .priority-Low { border-left-color: #198754; }
-    .stat-card { text-align: center; color: white; }
+    .quick-stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        transition: transform 0.2s;
+    }
+    .quick-stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .report-card {
+        border-left: 4px solid #007bff;
+    }
+    .report-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    .nav-pills .nav-link.active {
+        background-color: #007bff;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4">Dashboard</h2>
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h1>
+            <div class="d-flex gap-2">
+                {% if user.userprofile.role != 'DH' %}
+                <a href="{% url 'reports_dashboard' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-chart-bar me-1"></i>Full Reports
+                </a>
+                {% endif %}
+                <button class="btn btn-outline-secondary" onclick="refreshDashboard()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
 
-    <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="my-tasks-tab" data-bs-toggle="tab" data-bs-target="#my-tasks" type="button" role="tab">
-                <i class="fas fa-user-check me-1"></i> My Action Items <span class="badge bg-danger ms-1">{{ my_own_tasks|length }}</span>
-            </button>
-        </li>
-        {% if has_subordinates %}
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="team-workflow-tab" data-bs-toggle="tab" data-bs-target="#team-workflow" type="button" role="tab">
-                <i class="fas fa-users me-1"></i> Team Workflow
-            </button>
-        </li>
-        {% endif %}
-        {% if show_overall_stats %}
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
-                <i class="fas fa-chart-pie me-1"></i> Overall Stats
-            </button>
-        </li>
-        {% endif %}
-    </ul>
+        <!-- Enhanced Navigation Tabs -->
+        <ul class="nav nav-pills mb-4" id="dashboardTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="my-action-items-tab" data-bs-toggle="pill" data-bs-target="#my-action-items" type="button" role="tab">
+                    <i class="fas fa-tasks me-1"></i>My Action Items
+                    {% if my_own_tasks|length > 0 %}<span class="badge bg-danger ms-1">{{ my_own_tasks|length }}</span>{% endif %}
+                </button>
+            </li>
+            {% if has_subordinates %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="team-workflow-tab" data-bs-toggle="pill" data-bs-target="#team-workflow" type="button" role="tab">
+                    <i class="fas fa-users me-1"></i>Team Workflow
+                </button>
+            </li>
+            {% endif %}
+            {% if show_overall_stats %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="overall-stats-tab" data-bs-toggle="pill" data-bs-target="#overall-stats" type="button" role="tab">
+                    <i class="fas fa-chart-pie me-1"></i>Overall Stats
+                </button>
+            </li>
+            {% endif %}
+            {% if user.userprofile.role != 'DH' %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="reports-summary-tab" data-bs-toggle="pill" data-bs-target="#reports-summary" type="button" role="tab">
+                    <i class="fas fa-chart-bar me-1"></i>Reports Summary
+                </button>
+            </li>
+            {% endif %}
+        </ul>
 
-    <div class="tab-content" id="dashboardTabsContent">
-        <div class="tab-pane fade show active" id="my-tasks" role="tabpanel">
-            <div class="py-4">
-                {% if my_own_tasks %}
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                        {% for task in my_own_tasks %}
-                        <div class="col">
-                            <div class="card h-100 task-card priority-{{ task.priority }}">
-                                <div class="card-header d-flex justify-content-between"><span>{{ task.title }}</span></div>
-                                <div class="card-body"><p class="card-text">{{ task.description }}</p></div>
-                                <div class="card-footer bg-white border-top-0 text-end">
-                                    {% if task.type == 'case' %}<a href="{% url 'case_detail' task.object.case_id %}" class="btn btn-primary btn-sm">View Case</a>
-                                    {% elif task.type == 'grievance' %}<a href="{% url 'take_grievance_action' task.object.grievance_id %}" class="btn btn-danger btn-sm">Take Action</a>
-                                    {% elif task.type == 'approval' %}<a href="#" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#approvalModal" data-req-id="{{ task.object.id }}" data-action="approve">Approve</a> <a href="#" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#approvalModal" data-req-id="{{ task.object.id }}" data-action="reject">Reject</a>
-                                    {% elif task.type == 'handover' %}<a href="#" class="btn btn-warning btn-sm text-dark" data-bs-toggle="modal" data-bs-target="#handoverModal" data-req-id="{{ task.object.id }}">Handover</a>
-                                    {% elif task.type == 'acknowledgment' %}<a href="#" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#acknowledgeModal" data-req-id="{{ task.object.id }}">Acknowledge</a>
+        <div class="tab-content" id="dashboardTabContent">
+            <!-- My Action Items Tab -->
+            <div class="tab-pane fade show active" id="my-action-items" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Action Items Requiring My Attention</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if my_own_tasks %}
+                                <div class="list-group list-group-flush">
+                                    {% for task in my_own_tasks %}
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex align-items-center mb-1">
+                                                    {% if task.type == 'case' %}
+                                                        <i class="fas fa-file-alt text-primary me-2"></i>
+                                                    {% elif task.type == 'grievance' %}
+                                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                                    {% elif task.type == 'approval' %}
+                                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                                    {% endif %}
+                                                    <h6 class="mb-0">{{ task.title }}</h6>
+                                                    <span class="badge bg-{% if task.priority == 'High' %}danger{% elif task.priority == 'Medium' %}warning{% else %}secondary{% endif %} ms-2">{{ task.priority }}</span>
+                                                </div>
+                                                <p class="mb-1 text-muted">{{ task.description }}</p>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock me-1"></i>{{ task.date|date:"M d, Y" }}
+                                                </small>
+                                            </div>
+                                            <div class="btn-group" role="group">
+                                                {% if task.type == 'case' %}
+                                                <a href="{% url 'case_detail' case_id=task.object.case_id %}" class="btn btn-outline-primary btn-sm">
+                                                    <i class="fas fa-eye me-1"></i>View
+                                                </a>
+                                                <a href="{% url 'move_case' case_id=task.object.case_id %}" class="btn btn-primary btn-sm">
+                                                    <i class="fas fa-arrow-right me-1"></i>Process
+                                                </a>
+                                                {% elif task.type == 'grievance' %}
+                                                <a href="{% url 'take_grievance_action' grievance_id=task.object.grievance_id %}" class="btn btn-warning btn-sm">
+                                                    <i class="fas fa-cog me-1"></i>Take Action
+                                                </a>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <div class="text-center py-4">
+                                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                    <h5>All caught up!</h5>
+                                    <p class="text-muted">You have no pending action items at this time.</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <!-- Quick Stats Cards -->
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="card quick-stat-card">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-tasks fa-2x mb-2"></i>
+                                        <h3>{{ my_own_tasks|length }}</h3>
+                                        <p class="mb-0">Pending Tasks</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="card quick-stat-card">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                        <h3>{{ my_new_assigned_grievances_count|default:0 }}</h3>
+                                        <p class="mb-0">New Grievances</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Quick Actions</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <a href="{% url 'register_case' %}" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-plus me-1"></i>New Case
+                                    </a>
+                                    <a href="{% url 'register_grievance' %}" class="btn btn-outline-warning btn-sm">
+                                        <i class="fas fa-edit me-1"></i>New Grievance
+                                    </a>
+                                    {% if user.userprofile.role != 'DH' %}
+                                    <a href="{% url 'reports_dashboard' %}" class="btn btn-outline-info btn-sm">
+                                        <i class="fas fa-chart-bar me-1"></i>View Reports
+                                    </a>
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
-                        {% endfor %}
                     </div>
-                {% else %}
-                    <div class="text-center py-5"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><h4>You have no pending action items.</h4></div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="team-workflow" role="tabpanel">
-            <div class="py-4">
-                <h5>Pending Tasks with Subordinates (Summary)</h5>
-                <ul class="list-group mb-4">
-                    {% for assignee, count in team_summary.items %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ assignee }}
-                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
-                        </li>
-                    {% empty %}
-                        <li class="list-group-item">Your team has no pending tasks.</li>
-                    {% endfor %}
-                </ul>
-
-                {% if is_senior_officer and team_detailed_tasks %}
-                    <hr>
-                    <h5>Detailed View</h5>
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead><tr><th>Item Type</th><th>ID</th><th>Assigned To</th><th>Action</th></tr></thead>
-                            <tbody>
-                                {% for task in team_detailed_tasks %}
-                                <tr>
-                                    <td>{{ task.type }}</td>
-                                    <td>
-                                        {% if task.type == 'Case' %}
-                                            {{ task.object.case_id }}
-                                        {% elif task.type == 'Grievance' %}
-                                            {{ task.object.grievance_id }}
-                                        {% endif %}
-                                        </td>
-                                    <td>{{ task.holder.user.username }} ({{ task.holder.role }})</td>
-                                    <td>
-                                        {% if task.type == 'Case' %}
-                                            <a href="{% url 'case_detail' task.object.case_id %}" class="btn btn-sm btn-outline-secondary">View Case</a>
-                                        {% elif task.type == 'Grievance' %}
-                                            <a href="{% url 'take_grievance_action' task.object.grievance_id %}" class="btn btn-sm btn-outline-secondary">View Grievance</a>
-                                        {% endif %}
-                                        </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="stats" role="tabpanel">
-             <div class="py-4">
-                <div class="row mb-4">
-                    <div class="col-md-4"><div class="card bg-primary text-white text-center"><div class="card-body"><h4>{{ total_cases_stats }}</h4><p class="mb-0">Total Cases</p></div></div></div>
-                    <div class="col-md-4"><div class="card bg-warning text-dark text-center"><div class="card-body"><h4>{{ pending_cases_stats }}</h4><p class="mb-0">Pending</p></div></div></div>
-                    <div class="col-md-4"><div class="card bg-danger text-white text-center"><div class="card-body"><h4>{{ overdue_cases_stats }}</h4><p class="mb-0">Overdue</p></div></div></div>
                 </div>
             </div>
+
+            <!-- Team Workflow Tab -->
+            {% if has_subordinates %}
+            <div class="tab-pane fade" id="team-workflow" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0"><i class="fas fa-users me-2"></i>Team Workload Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if team_summary %}
+                                <div class="list-group">
+                                    {% for assignee, count in team_summary.items %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="fas fa-user me-2"></i>{{ assignee }}
+                                        </div>
+                                        <span class="badge bg-primary rounded-pill">{{ count }} cases</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <div class="text-center py-4">
+                                    <i class="fas fa-users text-muted fa-3x mb-3"></i>
+                                    <h5>Team is up to date</h5>
+                                    <p class="text-muted">Your team has no pending tasks at this time.</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if team_recent_grievances %}
+                        <div class="card mt-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">Recent Team Grievances</h6>
+                                <a href="{% url 'grievance_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Grievance ID</th>
+                                                <th>Pensioner</th>
+                                                <th>Assigned To</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for grievance in team_recent_grievances %}
+                                            <tr>
+                                                <td>{{ grievance.grievance_id }}</td>
+                                                <td>{{ grievance.pensioner.employee_name|default:"N/A" }}</td>
+                                                <td>{{ grievance.assigned_to.user.username|default:"Unassigned" }}</td>
+                                                <td>
+                                                    {% if grievance.status == 'NEW' %}
+                                                    <span class="badge bg-warning">New</span>
+                                                    {% elif grievance.status == 'ACTION_INITIATED' %}
+                                                    <span class="badge bg-info">In Progress</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if grievance.status == 'NEW' %}
+                                                    <a href="{% url 'take_grievance_action' grievance_id=grievance.grievance_id %}" class="btn btn-sm btn-primary">Action</a>
+                                                    {% elif grievance.generated_case %}
+                                                    <a href="{% url 'case_detail' case_id=grievance.generated_case.case_id %}" class="btn btn-sm btn-secondary">View Case</a>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <!-- Team Grievance Stats -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Team Grievance Status</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="card bg-warning text-dark text-center">
+                                            <div class="card-body py-2">
+                                                <h5>{{ team_grievance_stats.new_grievances|default:0 }}</h5>
+                                                <small>New</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="card bg-info text-white text-center">
+                                            <div class="card-body py-2">
+                                                <h5>{{ team_grievance_stats.action_initiated|default:0 }}</h5>
+                                                <small>In Progress</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="card bg-success text-white text-center">
+                                            <div class="card-body py-2">
+                                                <h5>{{ team_grievance_stats.disposed|default:0 }}</h5>
+                                                <small>Resolved</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="card bg-danger text-white text-center">
+                                            <div class="card-body py-2">
+                                                <h5>{{ team_grievance_stats.overdue|default:0 }}</h5>
+                                                <small>Overdue</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Overall Stats Tab -->
+            {% if show_overall_stats %}
+            <div class="tab-pane fade" id="overall-stats" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <i class="fas fa-briefcase fa-2x text-primary mb-2"></i>
+                                <h3>{{ total_cases_stats }}</h3>
+                                <p class="text-muted mb-0">Total Cases</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <i class="fas fa-clock fa-2x text-warning mb-2"></i>
+                                <h3>{{ pending_cases_stats }}</h3>
+                                <p class="text-muted mb-0">Pending Cases</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
+                                <h3>{{ overdue_cases_stats }}</h3>
+                                <p class="text-muted mb-0">Overdue Cases</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <h3>{{ completed_cases_stats }}</h3>
+                                <p class="text-muted mb-0">Completed</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- NEW: Reports Summary Tab -->
+            {% if user.userprofile.role != 'DH' %}
+            <div class="tab-pane fade" id="reports-summary" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Available Reports</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <!-- Case Analysis Reports -->
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-clock me-1"></i>Case Aging Analysis</h6>
+                                                <p class="small text-muted">Track how long cases have been pending at each stage</p>
+                                                <a href="{% url 'case_aging_report' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-users me-1"></i>Workload Analysis</h6>
+                                                <p class="small text-muted">Distribution and balance of work across team members</p>
+                                                <a href="{% url 'workload_analysis_report' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {% if user.userprofile.role in 'AO,CCA,Jt.CCA,Pr.CCA,ADMIN' %}
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-chart-line me-1"></i>Performance Trends</h6>
+                                                <p class="small text-muted">Historical performance and trend analysis</p>
+                                                <a href="{% url 'performance_trends_report' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if user.userprofile.role in 'CCA,Jt.CCA,Pr.CCA,ADMIN' %}
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-chart-pie me-1"></i>Executive Summary</h6>
+                                                <p class="small text-muted">High-level overview for senior management</p>
+                                                <a href="{% url 'executive_summary_report' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- Grievance Reports -->
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-exclamation-triangle me-1"></i>Grievance Analytics</h6>
+                                                <p class="small text-muted">Comprehensive grievance analysis and patterns</p>
+                                                <a href="{% url 'grievance_reports' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Progress Reports -->
+                                    <div class="col-md-6">
+                                        <div class="card report-card">
+                                            <div class="card-body">
+                                                <h6><i class="fas fa-flag-checkered me-1"></i>Milestone Progress</h6>
+                                                <p class="small text-muted">Track milestone completion and progress</p>
+                                                <a href="{% url 'milestone_report' %}" class="btn btn-sm btn-outline-primary">View Report</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <!-- Export Options -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-download me-1"></i>Export Data</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <a href="{% url 'export_cases_report' %}" class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-file-csv me-1"></i>Export Cases
+                                    </a>
+                                    <a href="{% url 'export_workload_report' %}" class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-file-csv me-1"></i>Export Workload
+                                    </a>
+                                    <a href="{% url 'export_performance_report' %}" class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-file-csv me-1"></i>Export Performance
+                                    </a>
+                                    <a href="{% url 'export_grievances' %}" class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-file-csv me-1"></i>Export Grievances
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Stats for Reports -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Quick Insights</h6>
+                            </div>
+                            <div class="card-body">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Click on "Full Reports" to access the comprehensive reports dashboard with detailed analytics and filtering options.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-</div>
-
-<div class="modal fade" id="approvalModal" tabindex="-1"><div class="modal-dialog"><form id="approvalForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="approvalModalTitle">Confirm</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p id="approvalModalText">Are you sure?</p><input type="hidden" name="action" id="approvalActionInput"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn" id="approvalSubmitBtn">Confirm</button></div></div></form></div></div>
-<div class="modal fade" id="handoverModal" tabindex="-1"><div class="modal-dialog"><form id="handoverForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title">Confirm Handover</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Confirm you are physically handing over the records.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-warning text-dark">Confirm</button></div></div></form></div></div>
-<div class="modal fade" id="acknowledgeModal" tabindex="-1"><div class="modal-dialog"><form id="acknowledgeForm" method="post"><div class="modal-content">{% csrf_token %}<div class="modal-header"><h5 class="modal-title">Acknowledge Return</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Confirm you have physically received the returned records.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-info">Acknowledge</button></div></div></form></div></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-$(document).ready(function() {
-    // Logic for the action modals (This code is correct and doesn't need changes)
-    $('#approvalModal').on('show.bs.modal', function (event) {
-        var button = $(event.relatedTarget);
-        var reqId = button.data('req-id');
-        var action = button.data('action');
-        var url = "/records/requisition/" + reqId + "/action/";
-        var modal = $(this);
-        modal.find('#approvalForm').attr('action', url);
-        modal.find('#approvalActionInput').val(action);
-        if (action === 'approve') {
-            modal.find('#approvalModalTitle').text('Confirm Approval');
-            modal.find('#approvalModalText').text('Are you sure you want to approve this request?');
-            modal.find('#approvalSubmitBtn').removeClass('btn-danger').addClass('btn-success').text('Approve');
-        } else {
-            modal.find('#approvalModalTitle').text('Confirm Rejection');
-            modal.find('#approvalModalText').text('Are you sure you want to reject this request?');
-            modal.find('#approvalSubmitBtn').removeClass('btn-success').addClass('btn-danger').text('Reject');
-        }
-    });
-    $('#handoverModal').on('show.bs.modal', function (event) {
-        var reqId = $(event.relatedTarget).data('req-id');
-        $(this).find('#handoverForm').attr('action', "/records/requisition/" + reqId + "/handover/");
-    });
-    $('#acknowledgeModal').on('show.bs.modal', function (event) {
-        var reqId = $(event.relatedTarget).data('req-id');
-        $(this).find('#acknowledgeForm').attr('action', "/records/requisition/" + reqId + "/acknowledge-return/");
-    });
+function refreshDashboard() {
+    window.location.reload();
+}
+
+// Initialize tabs
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh every 30 minutes
+    setTimeout(function() {
+        window.location.reload();
+    }, 1800000); // 30 minutes
 });
 </script>
 {% endblock %}

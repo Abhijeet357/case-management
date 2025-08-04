@@ -34,6 +34,7 @@ class CaseRegistrationForm(forms.ModelForm):
     retirement_month = forms.ChoiceField(choices=[(i, f'{i:02d}') for i in range(1, 13)], required=False, label="Month of Retirement")
     retirement_year = forms.ChoiceField(choices=[], required=False, label="Year of Retirement")
 
+
     class Meta:
         model = Case
         fields = ['case_type', 'priority', 'ppo_number', 'name_pensioner', 'registered_mobile', 'manual_mobile', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'type_of_pension', 'type_of_pensioner', 'date_of_retirement', 'initial_holder', 'retirement_month', 'retirement_year']
