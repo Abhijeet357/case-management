@@ -17,13 +17,18 @@ from dateutil.relativedelta import relativedelta
 from .models import Case, CaseType, CaseTypeTrigger, Record,RecordRequisition,RecordMovement,Location, PPOMaster, UserProfile, CaseMovement, WORKFLOW_STAGES, get_workflow_for_case, get_current_stage_index, get_status_color, FamilyPensionClaim, RetiringEmployee, DynamicFormField,CaseMilestone,CaseMilestoneProgress, CaseFieldData
 from .forms import CaseRegistrationForm,CaseMovementForm, UserRegistrationForm, PPOSearchForm, BulkImportForm
 from .forms import RecordRequisitionForm, RecordReturnForm
-from .forms import GrievanceRegistrationForm, GrievanceActionForm, GrievanceMode
-from .models import Grievance, PPOMaster, get_subordinate_roles
+from .forms import GrievanceRegistrationForm, GrievanceActionForm, GrievanceMode, IndexRegisterForm
+from .models import Grievance, PPOMaster, get_subordinate_roles, IndexRegister
 from collections import defaultdict
 from django.db.models import Count, Avg, Q, F, Sum, Max, Min,Case as DjangoCase, When, IntegerField, Value
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDate
 from django.utils.dateparse import parse_date
 from collections import Counter
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth.models import User
+from .models import FileAssignment, FileWorkflowStep
+from .utils import FileSuggestionEngine, FileWorkflowEngine
 
 
 @login_required
@@ -266,7 +271,21 @@ def register_case(request):
                 case.date_of_retirement = case.retiring_employee.retirement_date
             
             case.save()
-            
+                            # --- NEW LOGIC FOR FILE ASSIGNMENT ---
+            assigned_file = form.cleaned_data.get('assigned_file')
+            if assigned_file:
+                    FileAssignment.objects.create(
+                        index_file=assigned_file,
+                        case=case,
+                        matter_description=f"Case Registration: {case.case_title}",
+                        assigned_by=request.user,
+                        status='ACTIVE'
+                    )
+                    # Also link the case directly to the file
+                    case.assigned_file = assigned_file
+                    case.save()
+                # --- END OF NEW LOGIC ---
+
             # Create initial movement record
             CaseMovement.objects.create(
                 case=case,
@@ -308,6 +327,27 @@ def register_case(request):
     }
     
     return render(request, 'cases/register_case.html', context)
+
+# ADD THIS NEW VIEW TO SUPPORT THE SEARCHABLE DROPDOWN
+@login_required
+def ajax_file_search(request):
+    """AJAX endpoint for searching Index Register files."""
+    query = request.GET.get('q', '')
+    if len(query) < 2:
+        return JsonResponse({'files': []})
+
+    # Search in active files
+    files = IndexRegister.objects.filter(
+        Q(file_number__icontains=query) | Q(subject__icontains=query),
+        status='ACTIVE'
+    )[:15] # Limit results to 15
+
+    file_list = [{
+        'id': f.id,
+        'text': f"{f.file_number} - {f.subject}" # 'text' is required by Select2
+    } for f in files]
+
+    return JsonResponse({'results': file_list}) # 'results' is required by Select2
 
 @login_required
 def move_case(request, case_id):
@@ -894,77 +934,6 @@ def enhanced_dashboard(request):
 
     return render(request, 'cases/enhanced_dashboard.html', context)
 
-# Add these updated view functions to your views.py to handle the enhanced functionality
-
-@login_required
-def register_case_enhanced(request):
-    """Enhanced case registration with dynamic fields - with fallbacks"""
-    if request.method == 'POST':
-        try:
-            with transaction.atomic():
-                # Get basic case data
-                case_type_id = request.POST.get('case_type')
-                case_type = get_object_or_404(CaseType, id=case_type_id)
-
-                # Create the case using existing logic
-                case = Case(
-                    case_type=case_type,
-                    sub_category=request.POST.get('sub_category', ''),
-                    case_title=request.POST.get('case_title', ''),
-                    case_description=request.POST.get('case_description', ''),
-                    applicant_name=request.POST.get('applicant_name', ''),
-                    priority=request.POST.get('priority', 'Medium'),
-                    current_status='Registered',
-                    current_holder=request.user.userprofile,
-                    created_by=request.user,
-                    last_updated_by=request.user,
-                )
-                case.save()
-
-                # Handle PPO Master association if provided
-                ppo_number = request.POST.get('ppo_number')
-                if ppo_number:
-                    try:
-                        ppo_master = PPOMaster.objects.get(ppo_number=ppo_number)
-                        case.ppo_master = ppo_master
-                        case.save()
-                    except PPOMaster.DoesNotExist:
-                        pass
-
-                # Save dynamic field data (if CaseFieldData model exists)
-                try:
-                    for key, value in request.POST.items():
-                        if key.startswith('dynamic_') and value:
-                            field_name = key.replace('dynamic_', '')
-                            CaseFieldData.objects.create(
-                                case=case,
-                                field_name=field_name,
-                                field_value=value,
-                                created_by=request.user
-                            )
-                except Exception as e:
-                    print(f"Dynamic fields not available: {e}")
-
-                # Initialize milestones (if milestone system is available)
-                try:
-                    if hasattr(case, 'initialize_milestones'):
-                        case.initialize_milestones()
-                except Exception as e:
-                    print(f"Milestone system not available: {e}")
-
-                messages.success(request, f'Case {case.case_id} registered successfully!')
-                return redirect('case_detail', case_id=case.case_id)
-
-        except Exception as e:
-            messages.error(request, f'Error registering case: {str(e)}')
-
-    # GET request - show form
-    case_types = CaseType.objects.filter(is_active=True) if hasattr(CaseType, 'is_active') else CaseType.objects.all()
-    context = {
-        'case_types': case_types,
-    }
-
-    return render(request, 'cases/register_case_enhanced.html', context)
 
 @login_required
 def get_case_type_fields(request, case_type_id):
@@ -1501,6 +1470,7 @@ def register_grievance(request):
             
             grievance = form.save(commit=False)
             grievance.pensioner = pensioner_object
+            grievance.created_by = request.user
             grievance.save()
             
             messages.success(request, f"Grievance {grievance.grievance_id} has been successfully registered.")
@@ -3571,3 +3541,451 @@ def get_trend_data(request):
 def get_workload_data(request):
     """Placeholder API for workload data"""
     return JsonResponse({'message': 'Workload API - Coming Soon!'})
+
+@login_required
+def index_register_list(request):
+    """List view for Index Register accessible to DH and other users"""
+    user_profile = request.user.userprofile
+    
+    # Base queryset - users can see files they're responsible for or created
+    queryset = IndexRegister.objects.filter(
+        Q(dh_responsible=user_profile) | 
+        Q(created_by=request.user)
+    )
+    
+    # Admin can see all
+    if user_profile.role == 'ADMIN':
+        queryset = IndexRegister.objects.all()
+    
+    # Apply filters
+    file_format = request.GET.get('file_format')
+    workflow_type = request.GET.get('workflow_type')
+    status = request.GET.get('status')
+    
+    if file_format:
+        queryset = queryset.filter(file_format=file_format)
+    if workflow_type:
+        queryset = queryset.filter(workflow_type=workflow_type)
+    if status:
+        queryset = queryset.filter(status=status)
+    
+    context = {
+        'files': queryset.order_by('-date_of_opening'),
+        'file_formats': IndexRegister.FILE_FORMAT_CHOICES,
+        'workflow_types': IndexRegister.WORKFLOW_TYPE_CHOICES,
+        'status_choices': [
+            ('ACTIVE', 'Active'),
+            ('CLOSED', 'Closed'),
+            ('ARCHIVED', 'Archived')
+        ]
+    }
+    
+    return render(request, 'cases/index_register_list.html', context)
+
+@login_required
+def create_index_register(request):
+    """Create new index register entry"""
+    if request.method == 'POST':
+        form = IndexRegisterForm(request.POST)
+        if form.is_valid():
+            index_entry = form.save(commit=False)
+            index_entry.created_by = request.user
+            index_entry.save()
+            form.save_m2m()  # Save many-to-many relationships
+            
+            messages.success(request, f'Index entry {index_entry.file_number} created successfully.')
+            return redirect('index_register_list')
+    else:
+        form = IndexRegisterForm()
+        # Pre-fill DH responsible if user is DH
+        if request.user.userprofile.role == 'DH':
+            form.fields['dh_responsible'].initial = request.user.userprofile
+    
+    return render(request, 'cases/create_index_register.html', {'form': form})
+
+
+@login_required
+def ajax_file_search(request):
+    """AJAX endpoint for file search"""
+    query = request.GET.get('q', '')
+    user_profile = request.user.userprofile
+    
+    if len(query) < 2:
+        return JsonResponse({'files': []})
+    
+    # Search in accessible files
+    accessible_files = IndexRegister.objects.filter(
+        Q(dh_responsible=user_profile) | 
+        Q(created_by=request.user),
+        status='ACTIVE'
+    )
+    
+    files = accessible_files.filter(
+        Q(file_number__icontains=query) |
+        Q(subject__icontains=query)
+    )[:10]
+    
+    file_list = [{
+        'id': f.id,
+        'file_number': f.file_number,
+        'subject': f.subject,
+        'dh_responsible': f.dh_responsible.user.get_full_name()
+    } for f in files]
+    
+    return JsonResponse({'files': file_list})
+
+@login_required
+def file_suggestion_api(request):
+    """API for file suggestions based on case type"""
+    case_type_id = request.GET.get('case_type_id')
+    
+    if not case_type_id:
+        return JsonResponse({'suggestions': {}})
+    
+    try:
+        case_type = CaseType.objects.get(id=case_type_id)
+        suggestions = FileSuggestionEngine.suggest_files(case_type, request.user.userprofile)
+        
+        response_data = {}
+        for category, files in suggestions.items():
+            response_data[category] = [{
+                'id': f.id,
+                'file_number': f.file_number,
+                'subject': f.subject[:100],
+                'assignments_count': getattr(f, 'assignment_count', 0)
+            } for f in files]
+        
+        return JsonResponse({'suggestions': response_data})
+    
+    except CaseType.DoesNotExist:
+        return JsonResponse({'suggestions': {}})
+
+# Modified Trigger System
+class FileTriggerManager:
+    """Smart file creation/reuse system"""
+    
+    @staticmethod
+    def get_or_create_periodic_file(trigger_type, dh_user):
+        """Get existing periodic file or create new one"""
+        from datetime import date
+        
+        # Check for existing file for this period
+        if trigger_type == 'PERIODIC_MONTHLY':
+            existing = IndexRegister.objects.filter(
+                trigger_event_type=trigger_type,
+                dh_responsible=dh_user,
+                date_of_opening__year=date.today().year,
+                date_of_opening__month=date.today().month,
+                status='ACTIVE'
+            ).first()
+            
+            if existing:
+                return existing
+        
+        # Create new file if none exists
+        return IndexRegister.objects.create(
+            file_number=f"MONTHLY/{date.today().strftime('%Y/%m')}/{dh_user.id:03d}",
+            subject=f"Monthly Review File - {date.today().strftime('%B %Y')} - {dh_user.user.get_full_name()}",
+            trigger_event_type=trigger_type,
+            dh_responsible=dh_user,
+            workflow_type='Administrative',
+            current_location=Location.objects.get(custodian=dh_user),
+            created_by=User.objects.get(username='system')
+        )
+
+# File Dashboard Enhancement
+@login_required
+def file_management_dashboard(request):
+    """Enhanced dashboard for file management"""
+    user_profile = request.user.userprofile
+    
+    # Active files user is responsible for
+    my_files = IndexRegister.objects.filter(
+        dh_responsible=user_profile,
+        status='ACTIVE'
+    ).annotate(
+        active_assignments=Count('assignments', filter=Q(assignments__status='ACTIVE'))
+    )
+    
+    # Recent assignments
+    recent_assignments = FileAssignment.objects.filter(
+        index_file__dh_responsible=user_profile
+    ).order_by('-assigned_date')[:10]
+    
+    context = {
+        'my_files': my_files[:10],
+        'recent_assignments': recent_assignments,
+        'total_active_files': my_files.count()
+    }
+    
+    return render(request, 'cases/file_management_dashboard.html', context)
+
+@login_required
+def move_file(request, file_id):
+    """Move file to next step in workflow"""
+    index_file = get_object_or_404(IndexRegister, id=file_id)
+    user_profile = request.user.userprofile
+    
+    # Check permission
+    current_step = index_file.workflow_steps.filter(
+        assigned_to=user_profile,
+        status__in=['PENDING', 'IN_PROGRESS']
+    ).first()
+    
+    if not current_step:
+        messages.error(request, "You don't have permission to move this file")
+        return redirect('index_register_list')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        comments = request.POST.get('comments', '')
+        
+        if action == 'forward':
+            success, message = FileWorkflowEngine.move_to_next_step(
+                index_file, request.user, comments
+            )
+            if success:
+                messages.success(request, message)
+            else:
+                messages.error(request, message)
+        
+        elif action == 'return':
+            # Return to previous step
+            prev_step = index_file.workflow_steps.filter(
+                step_order=current_step.step_order - 1
+            ).first()
+            
+            if prev_step:
+                current_step.status = 'RETURNED'
+                current_step.save()
+                
+                prev_step.status = 'PENDING'
+                prev_step.save()
+                
+                messages.success(request, "File returned for clarification")
+        
+        return redirect('index_register_list')
+    
+    context = {
+        'file': index_file,
+        'current_step': current_step,
+        'workflow_steps': index_file.workflow_steps.order_by('step_order')
+    }
+    
+    return render(request, 'cases/move_file.html', context)
+
+@receiver(post_save, sender=Case)
+def trigger_file_creation_on_case(sender, instance, created, **kwargs):
+    """Auto-create files when cases are created"""
+    if created:
+        FileTriggerManager.create_case_triggered_file(instance)
+
+@receiver(post_save, sender=IndexRegister)
+def initialize_file_workflow(sender, instance, created, **kwargs):
+    """Initialize workflow when file is created"""
+    if created:
+        FileWorkflowEngine.initialize_workflow(instance)
+
+# Dashboard Integration
+@login_required
+def file_dashboard(request):
+    """Dashboard showing file workflow status"""
+    user_profile = request.user.userprofile
+    
+    # Files assigned to user
+    pending_files = FileWorkflowStep.objects.filter(
+        assigned_to=user_profile,
+        status='PENDING'
+    ).select_related('index_file')
+    
+    # Files created by user's subordinates
+    subordinate_roles = get_subordinate_roles(user_profile.role)
+    subordinate_files = IndexRegister.objects.filter(
+        dh_responsible__role__in=subordinate_roles,
+        status='ACTIVE'
+    )
+    
+    context = {
+        'pending_files': pending_files[:10],
+        'subordinate_files': subordinate_files[:10],
+        'total_pending': pending_files.count(),
+        'total_subordinate': subordinate_files.count()
+    }
+    
+    return render(request, 'cases/file_dashboard.html', context)
+
+# Add these missing views to your cases/views.py file
+
+@login_required
+def edit_index_register(request, pk):
+    """Edit an existing Index Register entry"""
+    index_entry = get_object_or_404(IndexRegister, pk=pk)
+    user_profile = request.user.userprofile
+    
+    # Permission check - only creator or admin can edit
+    if user_profile.role != 'ADMIN' and index_entry.created_by != request.user:
+        messages.error(request, "You don't have permission to edit this file.")
+        return redirect('index_register_list')
+    
+    if request.method == 'POST':
+        form = IndexRegisterForm(request.POST, instance=index_entry)
+        if form.is_valid():
+            updated_entry = form.save(commit=False)
+            updated_entry.last_modified_by = request.user
+            updated_entry.save()
+            form.save_m2m()
+            
+            messages.success(request, f'Index entry {updated_entry.file_number} updated successfully.')
+            return redirect('index_register_list')
+    else:
+        form = IndexRegisterForm(instance=index_entry)
+    
+    context = {
+        'form': form,
+        'index_entry': index_entry,
+        'is_edit': True
+    }
+    return render(request, 'cases/create_index_register.html', context)
+
+@login_required
+def move_index_register(request, pk):
+    """Move Index Register file to next workflow step"""
+    index_file = get_object_or_404(IndexRegister, pk=pk)
+    user_profile = request.user.userprofile
+    
+    # Check if user has permission to move this file
+    if (user_profile.role != 'ADMIN' and 
+        index_file.dh_responsible != user_profile and 
+        index_file.created_by != request.user):
+        messages.error(request, "You don't have permission to move this file.")
+        return redirect('index_register_list')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        comments = request.POST.get('comments', '')
+        to_user_id = request.POST.get('to_user')
+        
+        if action == 'forward' and to_user_id:
+            to_user = get_object_or_404(UserProfile, id=to_user_id)
+            
+            # Create file movement record
+            from .models import FileMovement
+            FileMovement.objects.create(
+                index_file=index_file,
+                from_user=user_profile,
+                to_user=to_user,
+                movement_type='FORWARD',
+                comments=comments
+            )
+            
+            # Update file location if needed
+            try:
+                to_location = Location.objects.get(custodian=to_user, location_type='USER_DESK')
+                index_file.current_location = to_location
+                index_file.save()
+            except Location.DoesNotExist:
+                # Create user desk location if it doesn't exist
+                to_location = Location.objects.create(
+                    name=f"{to_user.user.username}'s Desk",
+                    location_type='USER_DESK',
+                    custodian=to_user
+                )
+                index_file.current_location = to_location
+                index_file.save()
+            
+            messages.success(request, f'File moved to {to_user.user.get_full_name()}')
+            return redirect('index_register_list')
+        
+        elif action == 'close':
+            index_file.status = 'CLOSED'
+            index_file.save()
+            messages.success(request, 'File has been closed successfully.')
+            return redirect('index_register_list')
+    
+    # Get available users for forwarding
+    available_users = UserProfile.objects.filter(is_active_holder=True).exclude(id=user_profile.id)
+    
+    context = {
+        'index_file': index_file,
+        'available_users': available_users
+    }
+    return render(request, 'cases/move_index_register.html', context)
+
+@login_required
+def register_case_with_file_selection(request):
+    """Enhanced case registration with file selection/creation"""
+    if request.method == 'POST':
+        # Check if user wants to create new file or use existing
+        create_new_file = request.POST.get('create_new_file')
+        
+        if create_new_file:
+            # Handle new file creation
+            file_form = IndexRegisterForm(request.POST, prefix='file')
+            case_form = CaseRegistrationForm(request.POST, prefix='case')
+            
+            if file_form.is_valid() and case_form.is_valid():
+                with transaction.atomic():
+                    # Create new file
+                    new_file = file_form.save(commit=False)
+                    new_file.created_by = request.user
+                    new_file.save()
+                    file_form.save_m2m()
+                    
+                    # Create case and link to file
+                    case = case_form.save(commit=False)
+                    case.created_by = request.user
+                    case.last_updated_by = request.user
+                    case.assigned_file = new_file
+                    case.save()
+                    
+                    messages.success(request, f'Case {case.case_id} and file {new_file.file_number} created successfully!')
+                    return redirect('case_detail', case_id=case.case_id)
+        else:
+            # Handle existing file selection
+            case_form = CaseRegistrationForm(request.POST)
+            if case_form.is_valid():
+                case = case_form.save(commit=False)
+                case.created_by = request.user
+                case.last_updated_by = request.user
+                case.save()
+                
+                messages.success(request, f'Case {case.case_id} registered successfully!')
+                return redirect('case_detail', case_id=case.case_id)
+    else:
+        file_form = IndexRegisterForm(prefix='file')
+        case_form = CaseRegistrationForm(prefix='case')
+    
+    context = {
+        'file_form': file_form,
+        'case_form': case_form,
+        'case_types': CaseType.objects.filter(is_active=True)
+    }
+    return render(request, 'cases/register_case_enhanced.html', context)
+
+@login_required
+def view_index_register(request, pk):
+    """View details of an Index Register entry"""
+    index_entry = get_object_or_404(IndexRegister, pk=pk)
+    user_profile = request.user.userprofile
+    
+    # Check permission
+    can_view = (
+        user_profile.role == 'ADMIN' or
+        index_entry.dh_responsible == user_profile or
+        index_entry.created_by == request.user
+    )
+    
+    if not can_view:
+        messages.error(request, "You don't have permission to view this file.")
+        return redirect('index_register_list')
+    
+    # Get related assignments and movements
+    assignments = FileAssignment.objects.filter(index_file=index_entry).order_by('-assigned_date')
+    movements = FileMovement.objects.filter(index_file=index_entry).order_by('-movement_date')
+    
+    context = {
+        'index_entry': index_entry,
+        'assignments': assignments,
+        'movements': movements
+    }
+    return render(request, 'cases/view_index_register.html', context)

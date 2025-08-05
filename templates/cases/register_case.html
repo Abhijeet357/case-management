@@ -29,6 +29,16 @@
     padding: 20px;
 }
 
+/* File assignment section styling */
+.file-assignment-section {
+    border-left: 4px solid #28a745;
+    padding-left: 20px;
+    margin-top: 25px;
+    background-color: #f0f9f0;
+    border-radius: 0 8px 8px 0;
+    padding: 20px;
+}
+
 .btn {
     border-radius: 6px;
     font-weight: 500;
@@ -112,6 +122,30 @@
     background-color: #f8d7da;
 }
 
+/* File search styling */
+.file-search-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    margin-top: 5px;
+}
+
+.file-search-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+.file-search-item:hover {
+    background-color: #f8f9fa;
+}
+
+.file-search-item:last-child {
+    border-bottom: none;
+}
+
 @media (max-width: 768px) {
     .form-container {
         padding: 10px;
@@ -153,6 +187,26 @@
                 <div class="col-md-6">{{ form.priority|as_crispy_field }}</div>
             </div>
             {{ form.initial_holder|as_crispy_field }}
+            
+            <!-- File Assignment Section -->
+            <div class="file-assignment-section">
+                <h5><i class="fas fa-folder text-success me-2"></i>File Assignment (Optional)</h5>
+                <p class="text-muted mb-3">Assign this case to an existing Index Register file or leave blank to create a new one.</p>
+                
+                <div class="form-group">
+                    <label for="file_search">Search for Existing File</label>
+                    <input type="text" id="file_search" class="form-control" placeholder="Type file number or subject to search...">
+                    <div id="file_search_results" class="file-search-results" style="display: none;"></div>
+                </div>
+                
+                {{ form.assigned_file|as_crispy_field }}
+                
+                <div id="selected_file_info" class="mt-2" style="display: none;">
+                    <div class="alert alert-info">
+                        <strong>Selected File:</strong> <span id="selected_file_display"></span>
+                    </div>
+                </div>
+            </div>
             
             <!-- Conditional field groups -->
             <div id="know-your-pensioner-fields" class="specific-fields" style="display: none;">
@@ -301,7 +355,8 @@
                 {{ form.manual_mobile|as_crispy_field }}
             </div>
             
-            <button type="submit" class="btn btn-primary">Done</button>
+            <button type="submit" class="btn btn-primary">Register Case</button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary ms-2">Cancel</a>
         </form>
     </div>
 </div>
@@ -313,6 +368,87 @@ $(document).ready(function() {
     
     // Track fetch button states to prevent multiple requests
     let fetchInProgress = {};
+    
+    // File search functionality
+    let fileSearchTimeout;
+    $('#file_search').on('input', function() {
+        const query = $(this).val().trim();
+        
+        // Clear previous timeout
+        if (fileSearchTimeout) {
+            clearTimeout(fileSearchTimeout);
+        }
+        
+        if (query.length < 2) {
+            $('#file_search_results').hide();
+            return;
+        }
+        
+        // Debounce search requests
+        fileSearchTimeout = setTimeout(function() {
+            $.ajax({
+                url: '{% url "ajax_file_search" %}',
+                data: { q: query },
+                success: function(data) {
+                    const resultsDiv = $('#file_search_results');
+                    resultsDiv.empty();
+                    
+                    if (data.files && data.files.length > 0) {
+                        data.files.forEach(function(file) {
+                            const item = $(`
+                                <div class="file-search-item" data-file-id="${file.id}" data-file-number="${file.file_number}" data-subject="${file.subject}">
+                                    <strong>${file.file_number}</strong><br>
+                                    <small class="text-muted">${file.subject}</small>
+                                </div>
+                            `);
+                            resultsDiv.append(item);
+                        });
+                        resultsDiv.show();
+                    } else {
+                        resultsDiv.html('<div class="file-search-item text-muted">No files found</div>').show();
+                    }
+                },
+                error: function() {
+                    $('#file_search_results').html('<div class="file-search-item text-danger">Search failed</div>').show();
+                }
+            });
+        }, 300);
+    });
+    
+    // Handle file selection from search results
+    $(document).on('click', '.file-search-item', function() {
+        const fileId = $(this).data('file-id');
+        const fileNumber = $(this).data('file-number');
+        const subject = $(this).data('subject');
+        
+        if (fileId) {
+            // Set the hidden select field
+            $('#id_assigned_file').val(fileId);
+            
+            // Update search input
+            $('#file_search').val(`${fileNumber} - ${subject}`);
+            
+            // Show selected file info
+            $('#selected_file_display').text(`${fileNumber} - ${subject}`);
+            $('#selected_file_info').show();
+            
+            // Hide search results
+            $('#file_search_results').hide();
+        }
+    });
+    
+    // Clear file selection
+    $('#file_search').on('focus', function() {
+        $('#id_assigned_file').val('');
+        $('#selected_file_info').hide();
+    });
+    
+    // Hide search results when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#file_search, #file_search_results').length) {
+            $('#file_search_results').hide();
+        }
+    });
     
     // FIXED: Function to show appropriate fields based on case type
     function showFieldsForCaseType(caseTypeId, caseTypeText) {
@@ -533,9 +669,6 @@ $(document).ready(function() {
                             manualEntryNeeded.push('Pensioner Name');
                         }
                     }
-                    
-                    // Update other fields similarly...
-                    // (keeping all your existing field update logic)
                     
                     // Show success message
                     var message = '';

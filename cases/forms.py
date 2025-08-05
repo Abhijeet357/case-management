@@ -3,10 +3,11 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit, Row, Column, Field
-from .models import Case, Location, CaseType, Record, Grievance, GrievanceMode,RecordRequisition, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee, timezone
+from .models import IndexRegister,get_subordinate_roles, Case, Location, CaseType, Record, Grievance, GrievanceMode,RecordRequisition, PPOMaster, UserProfile, get_workflow_for_case, get_current_stage_index, RetiringEmployee, timezone
 from dateutil.relativedelta import relativedelta
 from datetime import date, timedelta
 from crispy_forms.bootstrap import AppendedText
+from django.db.models import Count, Q
 
 class CaseRegistrationForm(forms.ModelForm):
     ppo_number = forms.CharField(max_length=20, required=False, label="PPO Number")
@@ -33,11 +34,18 @@ class CaseRegistrationForm(forms.ModelForm):
 # New fields for Superannuation
     retirement_month = forms.ChoiceField(choices=[(i, f'{i:02d}') for i in range(1, 13)], required=False, label="Month of Retirement")
     retirement_year = forms.ChoiceField(choices=[], required=False, label="Year of Retirement")
-
+    
+    assigned_file = forms.ModelChoiceField(
+        queryset=IndexRegister.objects.filter(status='ACTIVE'),
+        label="Assign to Index File (Optional)",
+        help_text="Search for an existing file by number or subject.",
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control'}) # Will be enhanced in template
+    )
 
     class Meta:
         model = Case
-        fields = ['case_type', 'priority', 'ppo_number', 'name_pensioner', 'registered_mobile', 'manual_mobile', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'type_of_pension', 'type_of_pensioner', 'date_of_retirement', 'initial_holder', 'retirement_month', 'retirement_year']
+        fields = ['case_type', 'priority', 'ppo_number','assigned_file', 'name_pensioner', 'registered_mobile', 'manual_mobile', 'last_lc_done_date', 'kyp_flag', 'mode_of_receipt', 'date_of_death', 'name_claimant', 'relationship', 'service_book_enclosed', 'type_of_correction', 'original_ppo_submitted', 'fresh_or_compliance', 'type_of_employee', 'retiring_employee', 'type_of_pension', 'type_of_pensioner', 'date_of_retirement', 'initial_holder', 'retirement_month', 'retirement_year']
 
     # ***** CORRECTED INDENTATION FOR __init__ METHOD *****
     def __init__(self, *args, **kwargs):
@@ -537,4 +545,78 @@ class GrievanceActionForm(forms.Form):
             Submit('submit', 'Create Case from Grievance', css_class='btn btn-success mt-3')
         )
 
+class IndexRegisterForm(forms.ModelForm):
+    class Meta:
+        model = IndexRegister
+        fields = [
+            'file_number', 'file_format', 'subject', 'date_of_opening',
+            'workflow_type', 'trigger_event_type', 'dh_responsible',
+            'current_location', 'status', 'remarks', 'related_case_types'
+        ]
+        widgets = {
+            'date_of_opening': forms.DateInput(attrs={'type': 'date'}),
+            'subject': forms.Textarea(attrs={'rows': 3}),
+            'remarks': forms.Textarea(attrs={'rows': 3}),
+            'related_case_types': forms.CheckboxSelectMultiple(),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit DH choices to active users with DH role
+        self.fields['dh_responsible'].queryset = UserProfile.objects.filter(
+            role='DH', 
+            is_active_holder=True
+        )
+class FileSelectionForm(forms.Form):
+    """Form to select existing file for new matter"""
+    file_search = forms.CharField(
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Search by file number or subject',
+            'id': 'file-search'
+        })
+    )
+    
+    selected_file = forms.ModelChoiceField(
+        queryset=IndexRegister.objects.filter(status='ACTIVE'),
+        empty_label="Select a file",
+        widget=forms.Select(attrs={'id': 'selected-file'})
+    )
+    
+    create_new_file = forms.BooleanField(
+        required=False,
+        label="Create new file instead"
+    )
 
+class EnhancedCaseRegistrationForm(forms.ModelForm):
+    """Enhanced case form with file selection"""
+    
+    class Meta:
+        model = Case
+        fields = ['case_type', 'applicant_name', 'case_title', 'assigned_file']
+    
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        if user:
+            # Show files accessible to user
+            self.fields['assigned_file'].queryset = self.get_accessible_files(user)
+    
+    def get_accessible_files(self, user):
+        """Get files user can assign cases to"""
+        user_profile = user.userprofile
+        
+        if user_profile.role == 'ADMIN':
+            return IndexRegister.objects.filter(status='ACTIVE')
+        
+        # Files where user is DH or in workflow hierarchy
+        subordinate_roles = get_subordinate_roles(user_profile.role)
+        accessible_roles = [user_profile.role] + subordinate_roles
+        
+        return IndexRegister.objects.filter(
+            Q(dh_responsible__role__in=accessible_roles) |
+            Q(dh_responsible=user_profile),
+            status='ACTIVE'
+        )

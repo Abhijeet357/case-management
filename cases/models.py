@@ -10,7 +10,9 @@ from simple_history.models import HistoricalRecords
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from django.core.validators import RegexValidator
-from django.db.models import Q
+from django.db.models import Q, Count
+
+
 
 
 WORKFLOW_STAGES = {
@@ -379,6 +381,7 @@ class CaseManager(models.Manager):
     def pending_cases(self):
         return self.get_queryset().pending_cases()
 
+
 class Case(models.Model):
     PRIORITY_CHOICES = [
         ('High', 'High'),
@@ -471,7 +474,16 @@ class Case(models.Model):
     type_of_pension = models.CharField(max_length=20, choices=TYPE_OF_PENSION_CHOICES, blank=True)
     type_of_pensioner = models.CharField(max_length=30, choices=TYPE_OF_PENSIONER_CHOICES, blank=True)
     date_of_retirement = models.DateField(null=True, blank=True)
-    
+
+    # Link to Index Register file
+    assigned_file = models.ForeignKey(
+        'IndexRegister', 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True,
+        help_text="Index Register file in which this case is being dealt"
+    )
+
     # Custom manager
     objects = CaseManager()
     
@@ -542,6 +554,14 @@ class Case(models.Model):
     def can_be_viewed_by(self, user_profile):
         """Check if case can be viewed by given user profile"""
         return user_profile.can_view_case(self)
+    
+    def get_related_records(self):
+        """Get all records related to this case"""
+        records = Record.objects.filter(
+            Q(pensioner=self.ppo_master) |
+            Q(recordrequisition__case=self)
+        ).distinct()
+        return records
 
 class CaseMovement(models.Model):
     case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='movements')
@@ -835,6 +855,7 @@ def enhanced_save(self, *args, **kwargs):
     if not hasattr(self, '_milestones_initialized'):
         self.initialize_milestones()
         self._milestones_initialized = True
+
 class Location(models.Model):
     """
     Represents a physical location where a record can be stored.
@@ -858,41 +879,153 @@ class Location(models.Model):
 
     def __str__(self):
         return self.name
+    
+class DocumentCategory(models.Model):
+    """Categories for different types of documents"""
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    is_case_specific = models.BooleanField(default=True)
+    retention_period_years = models.IntegerField(default=30)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        verbose_name_plural = "Document Categories"
+    
+    def __str__(self):
+        return self.name
 
 class Record(models.Model):
-    """
-    Represents a single physical record, such as a Service Book or Pension File.
-    """
+    """Enhanced unified record model for all file types"""
+    
+    # EXPANDED record types (keeping original + new ones)
     RECORD_TYPE_CHOICES = [
+        # Original types
         ('SERVICE_BOOK', 'Service Book'),
         ('PENSION_FILE', 'Pension File'),
+        
+        # New types
+        ('ABSENTEE_STATEMENT', 'Absentee Statement'),
+        ('HQ_INSTRUCTIONS', 'HQ Instructions/References'),
+        ('ADMINISTRATIVE', 'Administrative File'),
+        ('FAMILY_DOCUMENTS', 'Family Documents'),
+        ('WEEKLY_REPORTS', 'Weekly Reports'),
+        ('FORTNIGHTLY_REPORTS', 'Fortnightly Reports'),
+        ('MONTHLY_REPORTS', 'Monthly Reports'),
+        ('QUARTERLY_REPORTS', 'Quarterly Reports'),
+        ('AUDIT_FILES', 'Audit Files'),
+        ('POLICY_FILES', 'Policy Files'),
+        ('MTNL_FILES', 'MTNL Files'),
+        ('OTHER', 'Other')
     ]
-
-    RECORD_STATUS_CHOICES = [
+    
+    # NEW: File format choices
+    FILE_FORMAT_CHOICES = [
+        ('PHYSICAL', 'Physical'),
+        ('E_OFFICE', 'e-Office'),
+        ('HYBRID', 'Both Physical & e-Office')
+    ]
+    
+    # EXPANDED status choices
+    STATUS_CHOICES = [
         ('AVAILABLE', 'Available'),
-        ('IN_USE', 'In Use'),
         ('REQUISITIONED', 'Requisitioned'),
+        ('IN_USE', 'In Use'),
         ('MISSING', 'Missing'),
-        ('NOT_APPLICABLE', 'Not Applicable'), # For cases where a record does not exist
+        ('ARCHIVED', 'Archived'),
+        ('RETURNED', 'Returned'),
+        ('TRANSFERRED', 'Transferred')
     ]
+    
+    # Core fields (keeping existing for backward compatibility)
+    pensioner = models.ForeignKey(
+        'PPOMaster', 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True,
+        help_text="Related pensioner (if applicable)"
+    )
+    record_type = models.CharField(max_length=25, choices=RECORD_TYPE_CHOICES)
+    current_location = models.ForeignKey('Location', on_delete=models.PROTECT)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
+    
+    # NEW: Enhanced tracking fields
+    file_format = models.CharField(
+        max_length=10, 
+        choices=FILE_FORMAT_CHOICES, 
+        default='PHYSICAL'
+    )
+    
+    document_category = models.ForeignKey(
+        DocumentCategory, 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True
+    )
+    
+    # Enhanced identification
 
-    record_type = models.CharField(max_length=20, choices=RECORD_TYPE_CHOICES, help_text="The type of the record.")
-    pensioner = models.ForeignKey(PPOMaster, on_delete=models.CASCADE, related_name='records', help_text="The pensioner this record belongs to.")
-    status = models.CharField(max_length=20, choices=RECORD_STATUS_CHOICES, default='AVAILABLE', help_text="The current status of the record.")
-    current_location = models.ForeignKey(Location, on_delete=models.PROTECT, help_text="The current physical location of the record.")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    history = HistoricalRecords()
+    file_number = models.CharField(
+        max_length=50, 
+        unique=True,
+        help_text="Unique file identification number"
+    )
 
+    reference_number = models.CharField(
+        max_length=100, 
+        blank=True,
+        help_text="For HQ instructions or external references"
+    )
+    volume_number = models.CharField(
+        max_length=20, 
+        blank=True,
+        help_text="For multi-volume files"
+    )
+    
+    # e-Office specific fields
+    eoffice_file_id = models.CharField(max_length=50, blank=True)
+    eoffice_url = models.URLField(blank=True)
+    digital_signature_status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('PENDING', 'Pending'),
+            ('SIGNED', 'Digitally Signed'),
+            ('NOT_REQUIRED', 'Not Required')
+        ], 
+        default='NOT_REQUIRED'
+    )
+    
+    # Administrative tracking
+    created_date = models.DateTimeField(auto_now_add=True)
+    last_accessed = models.DateTimeField(null=True, blank=True)
+    confidentiality_level = models.CharField(
+        max_length=20, 
+        choices=[
+            ('PUBLIC', 'Public'),
+            ('INTERNAL', 'Internal'),
+            ('CONFIDENTIAL', 'Confidential'),
+            ('SECRET', 'Secret')
+        ], 
+        default='INTERNAL'
+    )
+    
+    # Additional metadata
+    description = models.TextField(blank=True, help_text="Brief description of file contents")
+    remarks = models.TextField(blank=True)
+    
     class Meta:
-        # Ensures a pensioner can only have one of each type of record
-        unique_together = ('record_type', 'pensioner')
-        ordering = ['pensioner__employee_name', 'record_type']
-        verbose_name = "Physical Record"
-        verbose_name_plural = "Physical Records"
-
+        ordering = ['file_number']
+        verbose_name = "Record"
+        verbose_name_plural = "Records"
+    
     def __str__(self):
-        return f"{self.get_record_type_display()} for {self.pensioner.employee_name}"
+        if self.pensioner:
+            return f"{self.get_record_type_display()} - {self.pensioner.employee_name} ({self.file_number})"
+        return f"{self.get_record_type_display()} - {self.file_number}"
+    
+    def update_last_accessed(self):
+        """Update last accessed timestamp"""
+        self.last_accessed = timezone.now()
+        self.save(update_fields=['last_accessed'])
 
 class RecordRequisition(models.Model):
     """
@@ -910,8 +1043,27 @@ class RecordRequisition(models.Model):
         ('RETURN_REJECTED', 'Return Rejected'),
     ]
 
+    status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('PENDING_APPROVAL', 'Pending Approval'),
+            ('APPROVED', 'Approved'),
+            ('REJECTED', 'Rejected'),
+            ('FULFILLED', 'Fulfilled'),
+            ('PARTIALLY_FULFILLED', 'Partially Fulfilled'),
+            ('RETURNED', 'Returned'),
+            ('OVERDUE', 'Overdue')
+        ], 
+        default='PENDING_APPROVAL'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+
+
     case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name='requisitions', help_text="The case that this requisition is for.")
-    records_requested = models.ManyToManyField(Record, help_text="The specific records being requested.")
+    records_requested = models.ManyToManyField(Record)  # Uses enhanced Record
     status = models.CharField(max_length=20, choices=REQUISITION_STATUS_CHOICES, default='PENDING_APPROVAL')
     is_return_request = models.BooleanField(default=False, help_text="Check this if this is a request to return records.")
 
@@ -922,6 +1074,22 @@ class RecordRequisition(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     history = HistoricalRecords()
+
+    # Enhanced workflow
+    # This is the corrected version
+    purpose = models.TextField(blank=True, default='', help_text="The reason for the record requisition.")
+    expected_return_date = models.DateField(null=True, blank=True)
+    priority_level = models.CharField(
+        max_length=10, 
+        choices=[
+            ('LOW', 'Low'),
+            ('MEDIUM', 'Medium'),
+            ('HIGH', 'High'),
+            ('URGENT', 'Urgent')
+        ], 
+        default='MEDIUM'
+    )
+
 
     class Meta:
         ordering = ['-created_at']
@@ -1028,7 +1196,19 @@ class Grievance(models.Model):
     reply_details = models.TextField(blank=True, help_text="Details of the interim or final reply provided.")
     date_disposed = models.DateField(null=True, blank=True)
     generated_case = models.OneToOneField('Case', on_delete=models.SET_NULL, null=True, blank=True, related_name='source_grievance')
-        # THIS FIELD WAS ADDED TO FIX THE DASHBOARD ERROR
+    
+    # THIS FIELD WAS ADDED TO FIX THE DASHBOARD ERROR
+    # ADD THIS NEW FIELD
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_grievances',
+        help_text="The user who originally registered the grievance."
+    )
+
+
     assigned_to = models.ForeignKey(
         UserProfile,
         on_delete=models.SET_NULL,
@@ -1055,3 +1235,428 @@ class Grievance(models.Model):
             count = Grievance.objects.filter(date_received__year=today.year, date_received__month=today.month).count() + 1
             self.grievance_id = f"GRV-{today.year}-{today.month:02d}-{count:04d}"
         super().save(*args, **kwargs)
+
+class IndexRegister(models.Model):
+    """Index Register for file tracking and maintenance"""
+    
+    WORKFLOW_TYPE_CHOICES = [
+        ('Type_A', 'Type A (DH → AAO → AO)'),
+        ('Type_B', 'Type B (DH → AAO → AO → Jt.CCA)'),
+        ('Type_C', 'Type C (DH → AAO → AO → Jt.CCA → CCA)'),
+        ('Type_Extended', 'Type Extended (Full Hierarchy)'),
+        ('Administrative', 'Administrative Only'),
+        ('Reference', 'Reference/Information Only')
+    ]
+    
+    TRIGGER_EVENT_CHOICES = [
+        ('PERIODIC_MONTHLY', 'Periodic - Monthly'),
+        ('PERIODIC_QUARTERLY', 'Periodic - Quarterly'),
+        ('PERIODIC_HALF_YEARLY', 'Periodic - Half Yearly'),
+        ('PERIODIC_YEARLY', 'Periodic - Yearly'),
+        ('CASE_TYPE_TRIGGER', 'Case Type Trigger'),
+        ('GRIEVANCE_TRIGGER', 'Grievance Trigger'),
+        ('RECORD_TRIGGER', 'Record Requisition Trigger'),
+        ('HQ_INSTRUCTION', 'HQ Instruction'),
+        ('AUDIT_REQUIREMENT', 'Audit Requirement'),
+        ('MANUAL', 'Manual/Ad-hoc'),
+        ('OTHER', 'Other')
+    ]
+    
+    FILE_FORMAT_CHOICES = [
+        ('PHYSICAL', 'Physical'),
+        ('E_OFFICE', 'e-Office'),
+        ('HYBRID', 'Both Physical & e-Office')
+    ]
+    
+    # Primary fields
+   
+    file_number = models.CharField(
+        max_length=50, 
+        unique=True,
+        # We add null=True to allow existing rows to be empty temporarily
+        null=True, 
+        blank=True, # Also good practice to add blank=True for forms
+        help_text="Unique file identification number"
+)
+    
+    file_format = models.CharField(
+        max_length=10, 
+        choices=FILE_FORMAT_CHOICES,
+        default='PHYSICAL'
+    )
+    
+    subject = models.CharField(
+        max_length=500,
+        help_text="Brief description of file subject/purpose"
+    )
+    
+    date_of_opening = models.DateField(
+        default=timezone.now,
+        help_text="Date when file was opened/created"
+    )
+    
+    workflow_type = models.CharField(
+        max_length=20,
+        choices=WORKFLOW_TYPE_CHOICES,
+        help_text="Type of workflow this file follows"
+    )
+    
+    trigger_event_type = models.CharField(
+        max_length=25,
+        choices=TRIGGER_EVENT_CHOICES,
+        help_text="What triggered the creation of this file"
+    )
+    
+    dh_responsible = models.ForeignKey(
+        'UserProfile',
+        on_delete=models.PROTECT,
+        limit_choices_to={'role': 'DH'},
+        related_name='index_files_responsible',
+        help_text="Dealing Hand responsible for custody and maintenance"
+    )
+    
+    # Additional tracking fields
+    current_location = models.ForeignKey(
+        'Location',
+        on_delete=models.PROTECT,
+        help_text="Current physical/digital location"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('ACTIVE', 'Active'),
+            ('CLOSED', 'Closed'),
+            ('ARCHIVED', 'Archived'),
+            ('TRANSFERRED', 'Transferred'),
+            ('MISSING', 'Missing')
+        ],
+        default='ACTIVE'
+    )
+    
+    # Metadata
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='index_files_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_modified_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='index_files_modified',
+        null=True,
+        blank=True
+    )
+    last_modified_at = models.DateTimeField(auto_now=True)
+    
+    # Optional fields for enhanced tracking
+    remarks = models.TextField(blank=True)
+    related_case_types = models.ManyToManyField(
+        'CaseType',
+        blank=True,
+        help_text="Case types that may trigger this file"
+    )
+    
+    class Meta:
+        ordering = ['-date_of_opening', 'file_number']
+        verbose_name = "Index Register Entry"
+        verbose_name_plural = "Index Register Entries"
+    
+    def __str__(self):
+        return f"{self.file_number} - {self.subject[:50]}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-update last modified info
+        if self.pk:
+            self.last_modified_by = kwargs.pop('user', None)
+        super().save(*args, **kwargs)
+
+
+class FileWorkflowStep(models.Model):
+    """Define workflow steps for Index Register files"""
+    index_file = models.ForeignKey(IndexRegister, on_delete=models.CASCADE, related_name='workflow_steps')
+    step_name = models.CharField(max_length=100)
+    responsible_role = models.CharField(max_length=20, choices=UserProfile.ROLE_CHOICES)
+    step_order = models.IntegerField()
+    expected_days = models.IntegerField(default=1)
+    
+    # Status tracking
+    status = models.CharField(max_length=20, choices=[
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('RETURNED', 'Returned for Clarification')
+    ], default='PENDING')
+    
+    assigned_to = models.ForeignKey(UserProfile, on_delete=models.PROTECT, null=True, blank=True)
+    started_date = models.DateTimeField(null=True, blank=True)
+    completed_date = models.DateTimeField(null=True, blank=True)
+    comments = models.TextField(blank=True)
+
+class FileMovement(models.Model):
+    """Track file movements between users/roles"""
+    index_file = models.ForeignKey(IndexRegister, on_delete=models.CASCADE, related_name='movements')
+    from_user = models.ForeignKey(UserProfile, on_delete=models.PROTECT, related_name='files_sent')
+    to_user = models.ForeignKey(UserProfile, on_delete=models.PROTECT, related_name='files_received')
+    movement_type = models.CharField(max_length=20, choices=[
+        ('FORWARD', 'Forward'),
+        ('RETURN', 'Return'),
+        ('TRANSFER', 'Transfer')
+    ])
+    movement_date = models.DateTimeField(auto_now_add=True)
+    comments = models.TextField(blank=True)
+
+# File Trigger System
+class FileTriggerManager:
+    """Manages automatic file creation based on triggers"""
+    
+    @staticmethod
+    def create_periodic_files(trigger_type):
+        """Create files based on periodic triggers"""
+        from datetime import date
+        
+        # Get all DHs for file assignment
+        dh_users = UserProfile.objects.filter(role='DH', is_active_holder=True)
+        
+        if trigger_type == 'PERIODIC_MONTHLY':
+            file_number = f"MONTHLY/{date.today().strftime('%Y/%m')}/001"
+            subject = f"Monthly Review File - {date.today().strftime('%B %Y')}"
+        elif trigger_type == 'PERIODIC_QUARTERLY':
+            quarter = (date.today().month - 1) // 3 + 1
+            file_number = f"QUARTERLY/{date.today().year}/Q{quarter}/001"
+            subject = f"Quarterly Review File - Q{quarter} {date.today().year}"
+        
+        # Create files for each DH
+        for dh in dh_users:
+            IndexRegister.objects.create(
+                file_number=file_number.replace('001', f"{dh.id:03d}"),
+                subject=subject + f" - {dh.user.get_full_name()}",
+                trigger_event_type=trigger_type,
+                dh_responsible=dh,
+                workflow_type='Administrative',
+                current_location=Location.objects.get(custodian=dh),
+                created_by=User.objects.get(username='system')
+            )
+    
+    @staticmethod
+    def create_case_triggered_file(case):
+        """Create file when specific case types are initiated"""
+        # Map case types to file requirements
+        case_file_mapping = {
+            'Family Pension': 'FAMILY_PENSION',
+            'Death in Service': 'DEATH_SERVICE',
+            'Medical Reimbursement': 'MEDICAL_REIMB'
+        }
+        
+        if case.case_type.name in case_file_mapping:
+            file_type = case_file_mapping[case.case_type.name]
+            
+            IndexRegister.objects.create(
+                file_number=f"{file_type}/{case.case_id}",
+                subject=f"{case.case_type.name} - {case.applicant_name}",
+                trigger_event_type='CASE_TYPE_TRIGGER',
+                dh_responsible=case.current_holder,
+                workflow_type=case.case_type.workflow_type,
+                current_location=Location.objects.get(custodian=case.current_holder),
+                created_by=case.created_by
+            )
+
+# Workflow Engine
+class FileWorkflowEngine:
+    """Manages file workflow progression"""
+    
+    @staticmethod
+    def initialize_workflow(index_file):
+        """Create workflow steps when file is created"""
+        workflow_templates = {
+            'Type_A': [
+                {'step': 'Initial Processing', 'role': 'DH', 'days': 2},
+                {'step': 'Review and Verification', 'role': 'AAO', 'days': 3},
+                {'step': 'Final Approval', 'role': 'AO', 'days': 2}
+            ],
+            'Type_B': [
+                {'step': 'Initial Processing', 'role': 'DH', 'days': 2},
+                {'step': 'Primary Review', 'role': 'AAO', 'days': 3},
+                {'step': 'Secondary Review', 'role': 'AO', 'days': 2},
+                {'step': 'Final Approval', 'role': 'Jt.CCA', 'days': 1}
+            ],
+            'Administrative': [
+                {'step': 'Document Preparation', 'role': 'DH', 'days': 1},
+                {'step': 'Review and Action', 'role': 'AAO', 'days': 2}
+            ]
+        }
+        
+        template = workflow_templates.get(index_file.workflow_type, [])
+        
+        for i, step in enumerate(template):
+            FileWorkflowStep.objects.create(
+                index_file=index_file,
+                step_name=step['step'],
+                responsible_role=step['role'],
+                step_order=i + 1,
+                expected_days=step['days']
+            )
+    
+    @staticmethod
+    def move_to_next_step(index_file, current_user, comments=''):
+        """Move file to next workflow step"""
+        current_step = index_file.workflow_steps.filter(
+            status__in=['PENDING', 'IN_PROGRESS']
+        ).order_by('step_order').first()
+        
+        if not current_step:
+            return False, "No pending steps found"
+        
+        # Complete current step
+        current_step.status = 'COMPLETED'
+        current_step.completed_date = timezone.now()
+        current_step.comments = comments
+        current_step.save()
+        
+        # Get next step
+        next_step = index_file.workflow_steps.filter(
+            step_order=current_step.step_order + 1
+        ).first()
+        
+        if next_step:
+            # Assign to appropriate user with the required role
+            next_user = FileWorkflowEngine.get_next_user(next_step.responsible_role)
+            next_step.assigned_to = next_user
+            next_step.status = 'PENDING'
+            next_step.save()
+            
+            # Create movement record
+            FileMovement.objects.create(
+                index_file=index_file,
+                from_user=current_user.userprofile,
+                to_user=next_user,
+                movement_type='FORWARD',
+                comments=comments
+            )
+            
+            return True, f"File moved to {next_user.user.get_full_name()}"
+        else:
+            # Workflow completed
+            index_file.status = 'CLOSED'
+            index_file.save()
+            return True, "Workflow completed"
+    
+    @staticmethod
+    def get_next_user(role):
+        """Get appropriate user for next role in workflow"""
+        # Get least loaded user with the required role
+        return UserProfile.objects.filter(
+            role=role, 
+            is_active_holder=True
+        ).annotate(
+            workload=models.Count('files_received', filter=models.Q(
+                files_received__index_file__status='ACTIVE'
+            ))
+        ).order_by('workload').first()
+    
+
+# Add missing AdministrativeWorkflow model
+class AdministrativeWorkflow(models.Model):
+    """Handle internal administrative work with workflow patterns"""
+    WORK_TYPE_CHOICES = [
+        ('POLICY_REVIEW', 'Policy Review'),
+        ('AUDIT_RESPONSE', 'Audit Response'), 
+        ('HQ_COMPLIANCE', 'HQ Compliance'),
+        ('INTERNAL_QUERY', 'Internal Query'),
+        ('TRAINING_MATERIAL', 'Training Material'),
+        ('SYSTEM_UPGRADE', 'System Upgrade'),
+        ('OTHER', 'Other')
+    ]
+    
+    work_id = models.CharField(max_length=20, unique=True)
+    work_type = models.CharField(max_length=20, choices=WORK_TYPE_CHOICES)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    
+    # Workflow similar to cases
+    initiated_by = models.ForeignKey('UserProfile', on_delete=models.PROTECT, related_name='admin_work_initiated')
+    current_holder = models.ForeignKey('UserProfile', on_delete=models.PROTECT, related_name='admin_work_current')
+    
+    priority = models.CharField(max_length=10, choices=[
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'), 
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical')
+    ], default='MEDIUM')
+    
+    status = models.CharField(max_length=20, choices=[
+        ('INITIATED', 'Initiated'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('PENDING_REVIEW', 'Pending Review'),
+        ('COMPLETED', 'Completed'),
+        ('ON_HOLD', 'On Hold'),
+        ('CANCELLED', 'Cancelled')
+    ], default='INITIATED')
+    
+    # Dates
+    initiated_date = models.DateTimeField(auto_now_add=True)
+    target_completion_date = models.DateField()
+    actual_completion_date = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.work_id} - {self.title}"
+    
+class FileAssignment(models.Model):
+    """Link cases/matters to existing files instead of creating new ones"""
+    index_file = models.ForeignKey(IndexRegister, on_delete=models.CASCADE, related_name='assignments')
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, null=True, blank=True)
+    grievance = models.ForeignKey(Grievance, on_delete=models.CASCADE, null=True, blank=True)
+    administrative_work = models.ForeignKey(AdministrativeWorkflow, on_delete=models.CASCADE, null=True, blank=True)
+    
+    # Matter details
+    matter_description = models.CharField(max_length=500)
+    assigned_date = models.DateTimeField(auto_now_add=True)
+    assigned_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    
+    # Status in file
+    status = models.CharField(max_length=20, choices=[
+        ('ACTIVE', 'Active'),
+        ('COMPLETED', 'Completed'),
+        ('PENDING', 'Pending')
+    ], default='ACTIVE')
+    
+    class Meta:
+        verbose_name = "File Assignment"
+        verbose_name_plural = "File Assignments"
+
+# Smart File Suggestion System
+class FileSuggestionEngine:
+    """Suggest appropriate files based on case/matter type"""
+    
+    @staticmethod
+    def suggest_files(case_type, user_profile):
+        """Get suggested files for case type"""
+        suggestions = []
+        
+        # 1. Files specifically for this case type
+        case_specific = IndexRegister.objects.filter(
+            related_case_types=case_type,
+            status='ACTIVE',
+            dh_responsible__role__in=get_subordinate_roles(user_profile.role) + [user_profile.role]
+        )
+        
+        # 2. Generic files by workflow type
+        workflow_files = IndexRegister.objects.filter(
+            workflow_type=case_type.workflow_type,
+            status='ACTIVE',
+            trigger_event_type__in=['CASE_TYPE_TRIGGER', 'MANUAL']
+        )
+        
+        # 3. Commonly used files (most assignments)
+        common_files = IndexRegister.objects.filter(
+            status='ACTIVE'
+        ).annotate(
+            assignment_count=Count('assignments')
+        ).filter(assignment_count__gt=0).order_by('-assignment_count')
+        
+        return {
+            'case_specific': case_specific[:5],
+            'workflow_files': workflow_files[:5],
+            'common_files': common_files[:5]
+        }

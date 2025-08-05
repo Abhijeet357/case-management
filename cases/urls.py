@@ -93,4 +93,13 @@ urlpatterns = [
     # Report Scheduling and Automation (for future implementation)
     path('reports/schedule/', views.schedule_report, name='schedule_report'),
     path('reports/automated/', views.automated_report_list, name='automated_report_list'),
+
+    # Index Register
+    path('index-register/', views.index_register_list, name='index_register_list'),
+    path('index-register/create/', views.create_index_register, name='create_index_register'),
+    path('index-register/<int:pk>/edit/', views.edit_index_register, name='edit_index_register'),
+    path('api/file-search/', views.ajax_file_search, name='ajax_file_search'),
+    path('api/file-suggestions/', views.file_suggestion_api, name='file_suggestion_api'),
+    path('files/dashboard/', views.file_management_dashboard, name='file_management_dashboard'),
+
 ]
